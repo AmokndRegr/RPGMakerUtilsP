@@ -48,6 +48,9 @@
     TranslationManager._dictPath = null;
     TranslationManager._isDictChanged = false;
 
+    TranslationManager._recentText = [];
+    TranslationManager._recentMax = 4; //tweak by experience
+
     TranslationManager.isInitialized = function () {
         return this._dict !== null;
     };
@@ -87,6 +90,45 @@
         }, {});
     };
 
+    TranslationManager._inRecent = function (text) {
+        return this._recentText.some(t => t.includes(text));
+    };
+
+    TranslationManager._pushRecent = function (text) {
+        if (this._recentText[this._recentText.length - 1] !== text) {
+            this._recentText.push(text);
+            if (this._recentText.length > this._recentMax) {
+                this._recentText.shift();
+            }
+        }
+    };
+
+    TranslationManager.isOccupied = function (occupied, start, end) {
+        for (let i = start; i < end; i++) {
+            if (occupied[i]) return true;
+        }
+        return false;
+    };
+    //using [) settings
+
+    TranslationManager.getIndex = function (rawText, subString) {
+        // assume its in text
+        const positions = [];
+        let pos = 0;
+        while ((pos = rawText.indexOf(subString, pos)) !== -1) {
+            positions.push(pos);
+            pos += subString.length;
+        }
+        return positions;
+    };
+
+    TranslationManager.shouldIgnore = function (obj) {
+        return (
+            (typeof TRP_CORE !== "undefined" && obj === TRP_CORE)
+            // || (typeof rubyBitmap !== "undefined" && obj === rubyBitmap)
+        );
+    };
+
     TranslationManager.translate = function (text, detectStartWhitespace = true, times = Number.POSITIVE_INFINITY, cache = true) {
         if (typeof text !== 'string' || !this._dict || this._translatedSet.has(text)) {
             return text;
@@ -94,6 +136,7 @@
 
         // If text can be directly translated, do it
         if (this._dict[text]) {
+            this._pushRecent(this._dict[text]);
             return this._dict[text];
         }
 
@@ -102,55 +145,88 @@
             const lines = text.split('\n');
             const translatedLines = lines.map(line => this.translate(line, detectStartWhitespace, times));
             return translatedLines.join('\n');
-        } else {
-            if (detectStartWhitespace) {
-                const match = text.match(/^\s+/);
-                leadingSpaces = match ? match[0] : '';
-                text = text.slice(leadingSpaces.length);
-            }
-            if (this._dict[text]) {
-                return detectStartWhitespace ? leadingSpaces + this._dict[text] : this._dict[text];
-            }
-            // If not in the dictionary, try to find partial matches
-            let translatedText = text;
-            if (this._dict && this._lengthKeyDict) {
-                let count = 0;
-                const textLength = text.length;
-                const lenSorted = Object.keys(this._lengthKeyDict)
-                    .map(l => parseInt(l, 10))
-                    .filter(l => l < textLength)
-                    .sort((a, b) => b - a); // Descending order
+        }
 
-                // Go through all possible length buckets
-                outer: for (let len of lenSorted) {
-                    for (let key of this._lengthKeyDict[len]) {
-                        if (translatedText.includes(key)) {
-                            translatedText = translatedText.replace(key, this._dict[key]);
-                            count++;
-                            if (count >= times) {
+        let leadingSpaces = null
+        if (detectStartWhitespace) {
+            const match = text.match(/^\s+/);
+            leadingSpaces = match ? match[0] : '';
+            text = text.slice(leadingSpaces.length);
+        }
+        if (this._dict[text]) {
+            this._pushRecent(this._dict[text]);
+            return detectStartWhitespace ? leadingSpaces + this._dict[text] : this._dict[text];
+        }
+        // If not in the dictionary, try to find partial matches
+        let translatedText = text;
+        if (this._dict && this._lengthKeyDict) {
+            const textLength = text.length;
+            const lenSorted = Object.keys(this._lengthKeyDict)
+                .map(l => parseInt(l, 10))
+                .filter(l => l < textLength)
+                .sort((a, b) => b - a); // Descending order
+            let freeCount = textLength;
+
+            //occupied char record
+            const occupied = new Array(textLength).fill(false);
+            const result_intervals = [];
+            // Go through all possible length buckets
+            outer: for (let len of lenSorted) {
+                for (let key of this._lengthKeyDict[len]) {
+                    const positions = TranslationManager.getIndex(translatedText, key);
+                    if (positions.length > 0) {
+                        for (const start of positions) {
+                            const end = start + len;
+                            if (!TranslationManager.isOccupied(occupied, start, end)) {
+                                result_intervals.push({
+                                    start,
+                                    end,
+                                    replacement: this._dict[key]
+                                });
+                                for (let i = start; i < end; i++) {
+                                    occupied[i] = 1;
+                                };
+                                freeCount -= len;
+                            }
+                            if (freeCount === 0) {
                                 break outer;
                             }
-                        }
+                        };
                     }
                 }
+            }
 
-                if (cache && translatedText !== text) {
-                    // Cache the new translation
-                    this._dict[text] = translatedText;
-                    if (!this._lengthKeyDict[text.length]) {
-                        this._lengthKeyDict[text.length] = [];
-                    }
-                    this._lengthKeyDict[text.length].push(text);
-                    // this._isDictChanged = true;
+            let result = [];
+            let i = 0;
+            if (result_intervals.length > 0) {
+                result_intervals.sort((a, b) => a.start - b.start);
+                for (const { start, end, replacement } of result_intervals) {
+                    result.push(text.slice(i, start));
+                    result.push(replacement);
+                    i = end;
                 }
+            };
+            result.push(text.slice(i));
+            translatedText = result.join("");
 
-                // No matter what, add to translated set to avoid re-processing
+            if (translatedText !== text) {
+                //since cache is always enabled
+                this._dict[text] = translatedText;
+                if (!this._lengthKeyDict[text.length]) {
+                    this._lengthKeyDict[text.length] = [];
+                }
+                this._lengthKeyDict[text.length].push(text);
                 this._translatedSet.add(translatedText);
-
+                translatedText = detectStartWhitespace ? leadingSpaces + translatedText : translatedText;
+                this._pushRecent(translatedText);
+                //recent check happens when text hasnt been processed?
+            }
+            else {
+                this._translatedSet.add(translatedText);
                 translatedText = detectStartWhitespace ? leadingSpaces + translatedText : translatedText;
             }
-            return translatedText;
         }
+        return translatedText;
     };
 
     // Async-style callback, but runs synchronously
@@ -240,24 +316,24 @@
     //     }
     // };
 
-     TranslationManager.translateDataMap = function () {
-         if ($dataMap) {
-             if ($dataMap.displayName) {
-                 $dataMap.displayName = TranslationManager.translate($dataMap.displayName);
-             }
-             // if ($dataMap.events) {
-             //     $dataMap.events.forEach(event => {
-             //         if (event && event.pages) {
-             //             event.pages.forEach(page => {
-             //                 if (page.list) {
-             //                     page.list.forEach(TranslationManager.translateEventCommandComment);
-             //                 }
-             //             });
-             //         }
-             //     });
-             // }
-         }
-     };
+    TranslationManager.translateDataMap = function () {
+        if ($dataMap) {
+            if ($dataMap.displayName) {
+                $dataMap.displayName = TranslationManager.translate($dataMap.displayName);
+            }
+            // if ($dataMap.events) {
+            //     $dataMap.events.forEach(event => {
+            //         if (event && event.pages) {
+            //             event.pages.forEach(page => {
+            //                 if (page.list) {
+            //                     page.list.forEach(TranslationManager.translateEventCommandComment);
+            //                 }
+            //             });
+            //         }
+            //     });
+            // }
+        }
+    };
 
     TranslationManager.translateCommonData = function () {
         // Translate map names in $dataMapInfos
@@ -289,6 +365,8 @@
                     if (item.name) item.name = TranslationManager.translate(item.name);
                     if (item.description) item.description = TranslationManager.translate(item.description);
                     if (item.note) item.note = TranslationManager.translate(item.note, times = 1);
+                    if (item.preName) item.preName = item.name;
+                    if (item.preDescription) item.preDescription = item.description; // for ItemNameEscape.js
                 });
             }
         });
@@ -447,16 +525,23 @@
     // Window_Base.drawText is implemented in terms of Bitmap.drawText, so patching Bitmap.drawText should cover most cases.
     const _Bitmap_drawText = Bitmap.prototype.drawText;
     Bitmap.prototype.drawText = function (text, x, y, maxWidth, lineHeight, align) {
-        if (text) {
+        if (typeof (text) === 'string') {
+            if (TranslationManager._inRecent(text)) {
+                return _Bitmap_drawText.call(this, text, x, y, maxWidth, lineHeight, align);
+            }
             return _Bitmap_drawText.call(this, TranslationManager.translate(text), x, y, maxWidth, lineHeight, align);
-        } else {
+        }
+        else {
             return _Bitmap_drawText.call(this, text, x, y, maxWidth, lineHeight, align);
         }
     };
 
     const _Bitmap_measureTextWidth = Bitmap.prototype.measureTextWidth;
     Bitmap.prototype.measureTextWidth = function (text) {
-        if (text) {
+        if (typeof (text) === 'string') {
+            if (TranslationManager._inRecent(text)) {
+                return _Bitmap_measureTextWidth.call(this, text);
+            }
             return _Bitmap_measureTextWidth.call(this, TranslationManager.translate(text));
         } else {
             return _Bitmap_measureTextWidth.call(this, text);
@@ -486,8 +571,10 @@
 
     const _Window_Base_convertEscapeCharacters = Window_Base.prototype.convertEscapeCharacters;
     Window_Base.prototype.convertEscapeCharacters = function (text) {
-        text = _Window_Base_convertEscapeCharacters.call(this, text);
-        return TranslationManager.translate(text);
+        if (TranslationManager.shouldIgnore(this)) {
+            return _Window_Base_convertEscapeCharacters.call(this, text);
+        }
+        return _Window_Base_convertEscapeCharacters.call(this, TranslationManager.translate(text));
     };
     //#endregion
 })();

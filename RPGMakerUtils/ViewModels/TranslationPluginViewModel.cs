@@ -219,69 +219,29 @@ namespace RPGMakerUtils.ViewModels
                     return;
                 }
 
-                // === Step 4: 提取 $plugins 数组部分 ===
-                int startIndex = content.IndexOf("var $plugins =");
-                if (startIndex == -1)
-                {
-                    MessageBox.Show("未找到 'var $plugins =' 声明。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                // 找到 = 后的第一个 [ 和匹配的 ]
-                int arrayStart = content.IndexOf('[', startIndex);
-                if (arrayStart == -1)
-                {
-                    MessageBox.Show("未找到插件数组起始 '['。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                // 手动匹配括号层级，找到对应的 ]
-                int bracketCount = 0;
-                int arrayEnd = -1;
-                for (int i = arrayStart; i < content.Length; i++)
-                {
-                    if (content[i] == '[') bracketCount++;
-                    else if (content[i] == ']') bracketCount--;
-
-                    if (bracketCount == 0)
-                    {
-                        arrayEnd = i;
-                        break;
-                    }
-                }
-
-                if (arrayEnd == -1)
-                {
-                    MessageBox.Show("插件数组括号不匹配。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                // === Step 5: 提取数组字符串并解析 ===
-                string arrayString = content.Substring(arrayStart, arrayEnd - arrayStart + 1);
-
+                //why bother
                 try
                 {
-                    JArray plugins = JArray.Parse(arrayString);
+                    var match = Regex.Match(content, @"var\s+\$plugins\s*=\s*\[");
+                    
+                    if (!match.Success)
+                    {
+                        MessageBox.Show("未找到插件数组声明。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
 
-                    // === Step 6: 插入新插件（作为第一个元素） ===
-                    JObject newPlugin = JObject.Parse(PluginLine.TrimEnd(',')); // 移除末尾逗号，避免多余逗号
-                    plugins.Insert(0, newPlugin);
+                    string pluginText = PluginLine.Trim().TrimEnd(',');
 
-                    // === Step 7: 重新构建文件内容 ===
-                    string newArrayString = plugins.ToString(Formatting.None); // 不要缩进，保持原风格或后续统一格式
-                                                                               // 如果你希望美化，可以用 Formatting.Indented
+                    string nl = content.Contains("\r\n") ? "\r\n" : "\n";
+                    
+                    string insertText = nl + pluginText + ",";
 
-                    string newContent = content.Substring(0, arrayStart) +
-                                        newArrayString +
-                                        content.Substring(arrayEnd + 1);
+                    string newContent = content.Insert(match.Index + match.Length, insertText);
 
-                    // === Step 8: 写回文件 ===
                     File.WriteAllText(GamePluginsJsPath, newContent);
 
-                    // === Step 9: 复制插件文件 ===
                     await Utils.CopyEmbeddedFileAsync($"RPGMakerUtils.Resources.{SelectedPluginVersion}", TranslationPluginPath);
 
-                    // === Step 10: 处理 translations.json ===
                     if (!string.IsNullOrWhiteSpace(TranslateJsonPath) && File.Exists(TranslateJsonPath))
                     {
                         var destPath = Path.Combine(GameWwwPath, "translations.json");
@@ -308,9 +268,14 @@ namespace RPGMakerUtils.ViewModels
 
                     MessageBox.Show("已成功添加翻译插件和翻译文件。", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
-                catch (JsonException ex)
+                catch (Exception ex)
                 {
-                    MessageBox.Show("插件数组 JSON 解析失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(
+                        "修改 plugins.js 失败: " + ex.Message,
+                        "错误",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error
+                    );
                     return;
                 }
             });

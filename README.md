@@ -1,5 +1,19 @@
 # RPG Maker MV MZ 帮助软件
 
+个人使用时的一些修改，it just works.jpg
+
+## Patch Log
+
+插件修改仅覆盖 comprehensive 模式
+
+- b6c1
+  1. 重写替换逻辑，使用遮罩避免翻译函数内部的重复替换，弃用 times
+  2. ***实验性修改*** 添加 recentText 队列，尝试保留短字段翻译并避免不定长[拆字复译](https://github.com/Justype/RPGMakerUtils/issues/24)
+  3. 修改翻译插件添加逻辑，默认 plugins.js 合法，避免转义/失配报错
+  4. 添加 Items, Skills, Weapons, Armors, States 内的 preName 与 preDescription 字段翻译覆盖 (ItemNameEscape.js@RJ01529377)
+  5. 添加根据调用来源判断的黑名单 shouldIgnore，用于插件内部调用翻译覆写函数的情形。拉黑 TRP_CORE.convertEscapeCharacters (TRP_SkitMZ_ExCostume.js@RJ01529377)
+
+## 原版 readme
 本版本使用 .NET Framework 4.8 编写，支持 RPG Maker MV 和 RPG Maker MZ 的游戏。
 
 2.2.1 以及之前的版本有可能会被杀毒软件误报为病毒，请自行判断是否下载使用。
