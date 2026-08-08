@@ -173,6 +173,10 @@
             // Go through all possible length buckets
             outer: for (let len of lenSorted) {
                 for (let key of this._lengthKeyDict[len]) {
+                    if (!len) {
+                        break outer
+                    }
+                    // dict containing "":"" mapping
                     const positions = TranslationManager.getIndex(translatedText, key);
                     if (positions.length > 0) {
                         for (const start of positions) {
