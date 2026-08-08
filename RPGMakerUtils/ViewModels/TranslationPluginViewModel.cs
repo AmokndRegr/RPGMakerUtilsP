@@ -212,23 +212,32 @@ namespace RPGMakerUtils.ViewModels
                 // === Step 2: 读取整个文件内容 ===
                 string content = File.ReadAllText(GamePluginsJsPath);
 
-                // === Step 3: 检查是否已添加插件 ===
-                if (content.Contains("JtJsonTranslationManager"))
-                {
-                    MessageBox.Show("插件 JtJsonTranslationManager 已存在。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
+                try{
+                    var match1 = Regex.Match(content, @"(?s)var\s+\$plugins\s*=\s*(\[.*\])\s*;");
+                    // full json loaded, hopefully more robust
+                    if (!match1.Success)
+                    {
+                        MessageBox.Show("未找到 'var $plugins = [...]' 声明。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
 
-                //why bother
-                try
-                {
-                    var match = Regex.Match(content, @"var\s+\$plugins\s*=\s*\[");
-                    
-                    if (!match.Success)
+                    var plugins = JArray.Parse(match1.Groups[1].Value);
+                    var names = plugins.Select(p => (string)p["name"]).ToHashSet();
+
+                    if (names.Contains("JtJsonTranslationManager"))   // replacing content.Contains
+                    {
+                        MessageBox.Show("插件 JtJsonTranslationManager 已存在。", "提示",
+                                        MessageBoxButton.OK, MessageBoxImage.Information);
+                        return;
+                    }
+
+                    var match2 = Regex.Match(content, @"var\s+\$plugins\s*=\s*\[");
+                    // don bother processing the remaining n writing bk tho
+                    if (!match2.Success)
                     {
                         MessageBox.Show("未找到插件数组声明。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                         return;
-                    }
+                    }   // ded code ig
 
                     string pluginText = PluginLine.Trim().TrimEnd(',');
 
@@ -236,7 +245,7 @@ namespace RPGMakerUtils.ViewModels
                     
                     string insertText = nl + pluginText + ",";
 
-                    string newContent = content.Insert(match.Index + match.Length, insertText);
+                    string newContent = content.Insert(match2.Index + match2.Length, insertText);
 
                     File.WriteAllText(GamePluginsJsPath, newContent);
 
