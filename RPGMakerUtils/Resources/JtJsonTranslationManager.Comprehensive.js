@@ -125,6 +125,7 @@
     TranslationManager.shouldIgnore = function (obj) {
         return (
             (typeof TRP_CORE !== "undefined" && obj === TRP_CORE)
+            || (obj.constructor.name === 'Window_MapLog')
             // || (typeof rubyBitmap !== "undefined" && obj === rubyBitmap)
         );
     };
