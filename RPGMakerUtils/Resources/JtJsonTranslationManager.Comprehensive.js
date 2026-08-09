@@ -153,6 +153,10 @@
             leadingSpaces = match ? match[0] : '';
             text = text.slice(leadingSpaces.length);
         }
+        if (this._translatedSet.has(text)) {
+            this._pushRecent(text);
+            return detectStartWhitespace ? leadingSpaces + text : text;
+        }
         if (this._dict[text]) {
             this._pushRecent(this._dict[text]);
             return detectStartWhitespace ? leadingSpaces + this._dict[text] : this._dict[text];
