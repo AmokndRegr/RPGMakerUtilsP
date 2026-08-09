@@ -6,12 +6,28 @@
 
 插件修改仅覆盖 comprehensive 模式
 
+- b8c2
+  1. shouldIgnore 添加 drawTextEx@Window_MapLog.prototype.refresh (TMLogWindow.js@RJ01652728)，其在 convertEscapeCharacters 翻译且转义后再次调用 drawTextEx 导致翻译失配。
+      ```
+      \\C[2]rawText -(normal trans seq)-> \\C[2]translatedText -(convertESC)->
+      \u001bC[2]translatedText -(refresh call drawTextEx)-> \u001bC[2]repeatedTrans
+      ```
+  2. 在 leading spaces 去除后添加 _translatedSet 匹配以覆盖边缘情况
+      ```
+      startMessage 调用翻译命中原始字典，译文状态进入 convertEscapeCharacters，若换行分割后含 leading spaces，原逻辑进入一般翻译序列，有复译风险
+      ```
+  3. 上传 debug 版本插件供快速上手检查
+
 - b6c1
   1. 重写替换逻辑，使用遮罩避免翻译函数内部的重复替换，弃用 times
   2. ***实验性修改*** 添加 recentText 队列，尝试保留短字段翻译并避免不定长[拆字复译](https://github.com/Justype/RPGMakerUtils/issues/24)
-  3. 修改翻译插件添加逻辑，默认 plugins.js 合法，避免转义/失配报错
+  3. 修改翻译插件添加逻辑，默认 plugins.js 合法，避免转义/失配报错 (DarkPlasma_AutoLineBreak.js@RJ01529377)
   4. 添加 Items, Skills, Weapons, Armors, States 内的 preName 与 preDescription 字段翻译覆盖 (ItemNameEscape.js@RJ01529377)
   5. 添加根据调用来源判断的黑名单 shouldIgnore，用于插件内部调用翻译覆写函数的情形。拉黑 TRP_CORE.convertEscapeCharacters (TRP_SkitMZ_ExCostume.js@RJ01529377)
+      ```
+      TRP_CORE.convertEscapeCharacters = Window_Base.prototype.convertEscapeCharacters;  
+      args[i] = TRP_CORE.convertEscapeCharacters(args[i]);
+      ```
 
 ## 原版 readme
 本版本使用 .NET Framework 4.8 编写，支持 RPG Maker MV 和 RPG Maker MZ 的游戏。
