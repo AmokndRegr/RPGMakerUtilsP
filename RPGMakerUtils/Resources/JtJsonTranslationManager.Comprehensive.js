@@ -51,6 +51,10 @@
     TranslationManager._recentText = [];
     TranslationManager._recentMax = 4; //tweak by experience
 
+    TranslationManager._convertedTextSet = new Set();
+    TranslationManager._convertedTextQueue = [];
+    TranslationManager._convertedTextMax = 128; //idk, probly not that intensive
+
     TranslationManager.isInitialized = function () {
         return this._dict !== null;
     };
@@ -125,15 +129,30 @@
     TranslationManager.shouldIgnore = function (obj) {
         return (
             (typeof TRP_CORE !== "undefined" && obj === TRP_CORE)
-            || (obj.constructor.name === 'Window_MapLog')
+            // || (obj.constructor.name === 'Window_MapLog')
             // || (typeof rubyBitmap !== "undefined" && obj === rubyBitmap)
         );
+    };
+
+    TranslationManager.pushConvertedText = function (text) {
+        if (typeof text !== "string" || !text) return;
+        if (this._convertedTextSet.has(text)) return;
+
+        this._convertedTextSet.add(text);
+        this._convertedTextQueue.push(text);
+
+        if (this._convertedTextQueue.length > this._convertedTextMax) {
+            const oldestText = this._convertedTextQueue.shift();
+            this._convertedTextSet.delete(oldestText);
+        }
     };
 
     TranslationManager.translate = function (text, detectStartWhitespace = true, times = Number.POSITIVE_INFINITY, cache = true) {
         if (typeof text !== 'string' || !this._dict || this._translatedSet.has(text)) {
             return text;
         }
+
+        if (this._convertedTextSet.has(text)) return text;
 
         // If text can be directly translated, do it
         if (this._dict[text]) {
@@ -583,7 +602,10 @@
         if (TranslationManager.shouldIgnore(this)) {
             return _Window_Base_convertEscapeCharacters.call(this, text);
         }
-        return _Window_Base_convertEscapeCharacters.call(this, TranslationManager.translate(text));
+        const result = TranslationManager.translate(text);
+        const converted = _Window_Base_convertEscapeCharacters.call(this, result);
+        if (result !== text) TranslationManager.pushConvertedText(converted);
+        return converted;
     };
     //#endregion
 })();
