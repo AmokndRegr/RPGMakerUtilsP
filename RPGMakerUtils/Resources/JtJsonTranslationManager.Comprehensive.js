@@ -55,6 +55,8 @@
     TranslationManager._convertedTextQueue = [];
     TranslationManager._convertedTextMax = 128; //idk, probly not that intensive
 
+    TranslationManager._translationDisableDepth = 0;
+
     TranslationManager.isInitialized = function () {
         return this._dict !== null;
     };
@@ -144,6 +146,16 @@
         if (this._convertedTextQueue.length > this._convertedTextMax) {
             const oldestText = this._convertedTextQueue.shift();
             this._convertedTextSet.delete(oldestText);
+        }
+    };
+
+    TranslationManager.disablePluginTrans = function (callback) {
+        this._translationDisableDepth++;
+        try {
+            return callback();
+        }
+        finally {
+            this._translationDisableDepth--;
         }
     };
 
@@ -467,6 +479,29 @@
     };
     //#endregion
 
+    //SceneGlossary.js 
+    //2.15.0 
+    //MV
+    function patch_SceneGlossary() {
+        if (typeof Window_Glossary === 'undefined') return;
+        if (Window_Glossary.prototype._jtPatched) return;
+        Window_Glossary.prototype._jtPatched = true;
+
+        const _getPictureName = Window_Glossary.prototype.getPictureName;
+        Window_Glossary.prototype.getPictureName = function (index) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _getPictureName.call(this, index);
+            })
+        }
+
+        const _getPlusPictureData = Window_Glossary.prototype.getPlusPictureData;
+        Window_Glossary.prototype.getPlusPictureData = function (imageIndex, index) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _getPlusPictureData.call(this, imageIndex, index);
+            })
+        }
+    };
+
     //#region Plugin
     function patchPlugin() {
         // TextResource (RPG Maker MZ)
@@ -477,6 +512,7 @@
                 return TranslationManager.translate(text);
             };
         }
+        patch_SceneGlossary();
     };
     //#endregion
 
@@ -599,6 +635,9 @@
 
     const _Window_Base_convertEscapeCharacters = Window_Base.prototype.convertEscapeCharacters;
     Window_Base.prototype.convertEscapeCharacters = function (text) {
+        if (TranslationManager._translationDisableDepth > 0) {
+            return _Window_Base_convertEscapeCharacters.call(this, text);
+        }
         if (TranslationManager.shouldIgnore(this)) {
             return _Window_Base_convertEscapeCharacters.call(this, text);
         }
