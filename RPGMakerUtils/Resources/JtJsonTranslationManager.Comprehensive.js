@@ -555,6 +555,83 @@
         patch_TRP_CORE();
     };
     //#endregion
+    
+    function registerSGCategoryTrans() {
+        if (!TranslationManager._dict || !TranslationManager._lengthKeyDict) return;
+
+        const registered = new Set();
+
+        const hasOwn = function (object, key) {
+            return Object.prototype.hasOwnProperty.call(object, key);
+        }
+
+        const addTrans = function (source, target) {
+            if (!source || !target || hasOwn(TranslationManager._dict, source)) return;
+
+            TranslationManager._dict[source] = target;
+
+            if (!TranslationManager._lengthKeyDict[source.length]) {
+                TranslationManager._lengthKeyDict[source.length] = [];
+            }
+
+            if (!TranslationManager._lengthKeyDict[source.length].includes(source)) {
+                TranslationManager._lengthKeyDict[source.length].push(source);
+            }
+
+            TranslationManager._translatedSet.add(target);
+        };
+
+        const getValueParts = function (value, expectedLength) {
+            const delimiters = [',', '，'];
+
+            for (const delimiter of delimiters) {
+                if (!value.includes(delimiter)) continue;
+
+                const parts = value.split(delimiter);
+
+                if (parts.length === expectedLength && parts.every(function (part) { return part.length > 0; })) {
+                    return parts;
+                }
+            }
+
+            //non dividable fallback
+            return expectedLength === 1 && value.length > 0 ? [value] : null
+        }
+
+        const getSGCategory = function (item) {
+            if (!item || !item.meta) return undefined;
+            if (hasOwn(item.meta, 'SGカテゴリ')) return item.meta.SGカテゴリ;
+            if (hasOwn(item.meta, 'SGCategory')) return item.meta.SGCategory;
+            return undefined;
+        }
+
+        if (!$dataItems || !Array.isArray($dataItems)) return;
+
+        $dataItems.forEach(function (item) {
+            const sourceComb = getSGCategory(item);
+
+            if (sourceComb === undefined || sourceComb === null || sourceComb === '' || registered.has(sourceComb)) return;
+
+            registered.add(sourceComb);
+
+            const translatedComb = TranslationManager._dict[sourceComb];
+
+            if (!translatedComb) return;
+
+            const sourceParts = sourceComb.split(',');
+            const translatedParts = getValueParts(translatedComb, sourceParts.length);
+
+            if (!translatedParts) return;
+
+            sourceParts.forEach(function (sourcePart, index) {
+                const translatedPart = translatedParts[index];
+
+                if (!sourcePart || !translatedPart) return;
+
+                addTrans(sourcePart, translatedPart);
+            })
+        })
+    };
 
     //#region Initialization
     // --- Core Logic: Load the Translation Dictionary ---
@@ -587,6 +664,7 @@
     DataManager.onLoad = function (object) {
         _DataManager_onLoad.call(this, object);
         if (DataManager.isDatabaseLoaded() && !DataManager._translationApplied && TranslationManager.isInitialized()) {
+            registerSGCategoryTrans();
             TranslationManager.translateCommonData();
             patchPlugin();
             DataManager._translationApplied = true;
