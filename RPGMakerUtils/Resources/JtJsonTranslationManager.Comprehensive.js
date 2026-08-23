@@ -77,8 +77,22 @@
                     for (let i = 0; i < keyLines.length; i++) {
                         if (keyLines[i] && valueLines[i]) {
                             if (keyLines[i].length <= 3) continue; // Skip very short lines
-                            this._dict[keyLines[i]] = valueLines[i];
-                            this._translatedSet.add(valueLines[i]);
+                            const sourceLine = keyLines[i];
+                            const targetLine = valueLines[i];
+
+                            this._dict[sourceLine] = targetLine;
+                            this._translatedSet.add(targetLine);
+
+                            const normalizedSource = sourceLine.replace(/^\s+/, '');
+                            const normalizedTarget = targetLine.replace(/^\s+/, '');
+
+                            if (normalizedSource &&
+                                normalizedSource !== sourceLine &&
+                                !Object.prototype.hasOwnProperty.call(this._dict, normalizedSource)
+                            ) {
+                                this._dict[normalizedSource] = normalizedTarget;
+                                this._translatedSet.add(normalizedTarget);
+                            }
                         }
                     }
                 }
