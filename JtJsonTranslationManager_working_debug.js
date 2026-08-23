@@ -78,6 +78,12 @@
     TranslationManager._seqLog = 0;
     TranslationManager.logTrace = logTrace;
 
+    TranslationManager._convertedTextSet = new Set();
+    TranslationManager._convertedTextQueue = [];
+    TranslationManager._convertedTextMax = 128;
+
+    TranslationManager._translationDisableDepth = 0;
+
     TranslationManager.isInitialized = function () {
         return this._dict !== null;
     };
@@ -98,8 +104,21 @@
                     for (let i = 0; i < keyLines.length; i++) {
                         if (keyLines[i] && valueLines[i]) {
                             if (keyLines[i].length <= 3) continue; // Skip very short lines
-                            this._dict[keyLines[i]] = valueLines[i];
-                            this._translatedSet.add(valueLines[i]);
+                            const sourceLine = keyLines[i];
+                            const targetLine = valueLines[i];
+
+                            this._dict[sourceLine] = targetLine;
+                            this._translatedSet.add(targetLine);
+
+                            const normalizedSource = sourceLine.replace(/^\s+/, '');
+                            const normalizedTarget = targetLine.replace(/^\s+/, '');
+
+                            if (normalizedSource && normalizedSource !== sourceLine &&
+                                !Object.prototype.hasOwnProperty.call(this._dict, normalizedSource)
+                            ) {
+                                this._dict[normalizedSource] = normalizedTarget;
+                                this._translatedSet.add(normalizedTarget);
+                            }
                         }
                     }
                 }
@@ -157,9 +176,41 @@
         );
     };
 
+    TranslationManager.pushConvertedText = function (text) {
+        if (typeof text !== 'string' || !text) return;
+        if (this._convertedTextSet.has(text)) return;
+
+        this._convertedTextSet.add(text);
+        this._convertedTextQueue.push(text);
+
+        if (this._convertedTextQueue.length > this._convertedTextMax) {
+            const oldText = this._convertedTextQueue.shift();
+            this._convertedTextSet.delete(oldText);
+        }
+    };
+
+    TranslationManager.disablePluginTrans = function (callback) {
+        this._translationDisableDepth++;
+        try {
+            return callback();
+        }
+        finally {
+            this._translationDisableDepth--;
+        }
+    }
+
     TranslationManager.translate = function (text, detectStartWhitespace = true, times = Number.POSITIVE_INFINITY, cache = true) {
         if (typeof text !== "string" || !this._dict) {
             logTrace("translate non string or no dict", text, text);
+            return text;
+        }
+
+        if (this._convertedTextSet.has(text)) {
+            logTrace(
+                'translate skipped already converted text',
+                text,
+                text
+            );
             return text;
         }
 
@@ -494,6 +545,54 @@
     };
     //#endregion
 
+    //SceneGlossary.js 
+    //2.15.0 
+    //MV
+    function patch_SceneGlossary() {
+        if (typeof Window_Glossary === 'undefined') return;
+        if (Window_Glossary.prototype._jtPatched) return;
+        Window_Glossary.prototype._jtPatched = true;
+
+        const _getPictureName = Window_Glossary.prototype.getPictureName;
+        if (typeof _getPictureName === "function") {
+            Window_Glossary.prototype.getPictureName = function (index) {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _getPictureName.call(this, index);
+                })
+            }
+        }
+
+        const _getPlusPictureData = Window_Glossary.prototype.getPlusPictureData;
+        if (typeof _getPlusPictureData === "function") {
+            Window_Glossary.prototype.getPlusPictureData = function (imageIndex, index) {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _getPlusPictureData.call(this, imageIndex, index);
+                })
+            }
+        }
+    };
+
+    //TRP_CORE.js
+    //1.28
+    //MZ
+    //actually registered in TRP_SkitMZ.js 1.22
+    function patch_TRP_CORE() {
+        if (typeof TRP_CORE === "undefined") return;
+        if (TRP_CORE._jtPatched) return;
+
+        const _convertEscapeCharacters = TRP_CORE.convertEscapeCharacters;
+        if (typeof _convertEscapeCharacters !== "function") return;
+        TRP_CORE._jtPatched = true;
+        //postpone cuz CEC is not compulsory
+        //only once tho?
+
+        TRP_CORE.convertEscapeCharacters = function (text) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _convertEscapeCharacters.call(this, text);
+            })
+        }
+    }
+
     //#region Plugin
     function patchPlugin() {
         // TextResource (RPG Maker MZ)
@@ -504,8 +603,87 @@
                 return TranslationManager.translate(text);
             };
         }
+        patch_SceneGlossary();
+        patch_TRP_CORE();
     };
     //#endregion
+
+    function registerSGCategoryTrans() {
+        if (!TranslationManager._dict || !TranslationManager._lengthKeyDict) return;
+
+        const registered = new Set();
+
+        const hasOwn = function (object, key) {
+            return Object.prototype.hasOwnProperty.call(object, key);
+        }
+
+        const addTrans = function (source, target) {
+            if (!source || !target || hasOwn(TranslationManager._dict, source)) return;
+
+            TranslationManager._dict[source] = target;
+
+            if (!TranslationManager._lengthKeyDict[source.length]) {
+                TranslationManager._lengthKeyDict[source.length] = [];
+            }
+
+            if (!TranslationManager._lengthKeyDict[source.length].includes(source)) {
+                TranslationManager._lengthKeyDict[source.length].push(source);
+            }
+
+            TranslationManager._translatedSet.add(target);
+        };
+
+        const getValueParts = function (value, expectedLength) {
+            const delimiters = [',', '，'];
+
+            for (const delimiter of delimiters) {
+                if (!value.includes(delimiter)) continue;
+
+                const parts = value.split(delimiter);
+
+                if (parts.length === expectedLength && parts.every(function (part) { return part.length > 0; })) {
+                    return parts;
+                }
+            }
+
+            //non dividable fallback
+            return expectedLength === 1 && value.length > 0 ? [value] : null
+        }
+
+        const getSGCategory = function (item) {
+            if (!item || !item.meta) return undefined;
+            if (hasOwn(item.meta, 'SGカテゴリ')) return item.meta.SGカテゴリ;
+            if (hasOwn(item.meta, 'SGCategory')) return item.meta.SGCategory;
+            return undefined;
+        }
+
+        if (!$dataItems || !Array.isArray($dataItems)) return;
+
+        $dataItems.forEach(function (item) {
+            const sourceComb = getSGCategory(item);
+
+            if (sourceComb === undefined || sourceComb === null || sourceComb === '' || registered.has(sourceComb)) return;
+
+            registered.add(sourceComb);
+
+            const translatedComb = TranslationManager._dict[sourceComb];
+
+            if (!translatedComb) return;
+
+            const sourceParts = sourceComb.split(',');
+            const translatedParts = getValueParts(translatedComb, sourceParts.length);
+
+            if (!translatedParts) return;
+
+            sourceParts.forEach(function (sourcePart, index) {
+                const translatedPart = translatedParts[index];
+
+                if (!sourcePart || !translatedPart) return;
+
+                addTrans(sourcePart, translatedPart);
+            })
+        })
+    };
 
     //#region Initialization
     // --- Core Logic: Load the Translation Dictionary ---
@@ -538,6 +716,7 @@
     DataManager.onLoad = function (object) {
         _DataManager_onLoad.call(this, object);
         if (DataManager.isDatabaseLoaded() && !DataManager._translationApplied && TranslationManager.isInitialized()) {
+            registerSGCategoryTrans();
             TranslationManager.translateCommonData();
             patchPlugin();
             DataManager._translationApplied = true;
@@ -640,13 +819,23 @@
 
     const _Window_Base_convertEscapeCharacters = Window_Base.prototype.convertEscapeCharacters;
     Window_Base.prototype.convertEscapeCharacters = function (text) {
+        if (TranslationManager._translationDisableDepth > 0) {
+            TranslationManager.logTrace('convert while translation disabled', text, this.constructor ? this.constructor.name : 'constructor name unavailable')
+            return _Window_Base_convertEscapeCharacters.call(this, text);
+        }
+        /*
         if (TranslationManager.shouldIgnore(this)) {
             logTrace("window_base_convertescapecharacters escape", text, Object.keys(this).slice(0, 20));
             return _Window_Base_convertEscapeCharacters.call(this, text);
         }
+        */
         let result = TranslationManager.translate(text);
         logTrace("window_base_convertescapecharacters_pre", text, result, Object.keys(this).slice(0, 20));
-        return _Window_Base_convertEscapeCharacters.call(this, result);
+        let converted = _Window_Base_convertEscapeCharacters.call(this, result);
+        if (result !== text) {
+            TranslationManager.pushConvertedText(converted)
+        }
+        return converted;
     };
     //#endregion
 
