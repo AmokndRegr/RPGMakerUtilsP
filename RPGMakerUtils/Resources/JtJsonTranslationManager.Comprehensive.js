@@ -488,19 +488,44 @@
         Window_Glossary.prototype._jtPatched = true;
 
         const _getPictureName = Window_Glossary.prototype.getPictureName;
-        Window_Glossary.prototype.getPictureName = function (index) {
-            return TranslationManager.disablePluginTrans(() => {
-                return _getPictureName.call(this, index);
-            })
+        if (typeof _getPictureName === "function") {
+            Window_Glossary.prototype.getPictureName = function (index) {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _getPictureName.call(this, index);
+                })
+            }
         }
 
         const _getPlusPictureData = Window_Glossary.prototype.getPlusPictureData;
-        Window_Glossary.prototype.getPlusPictureData = function (imageIndex, index) {
-            return TranslationManager.disablePluginTrans(() => {
-                return _getPlusPictureData.call(this, imageIndex, index);
-            })
+        if (typeof _getPlusPictureData === "function") {
+            Window_Glossary.prototype.getPlusPictureData = function (imageIndex, index) {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _getPlusPictureData.call(this, imageIndex, index);
+                })
+            }
         }
     };
+
+    //TRP_CORE.js
+    //1.28
+    //MZ
+    //actually registered in TRP_SkitMZ.js 1.22
+    function patch_TRP_CORE() {
+        if (typeof TRP_CORE === "undefined") return;
+        if (TRP_CORE._jtPatched) return;
+
+        const _convertEscapeCharacters = TRP_CORE.convertEscapeCharacters;
+        if (typeof _convertEscapeCharacters !== "function") return;
+        TRP_CORE._jtPatched = true;
+        //postpone cuz CEC is not compulsory
+        //only once tho?
+
+        TRP_CORE.convertEscapeCharacters = function (text) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _convertEscapeCharacters.call(this, text);
+            })
+        }
+    }
 
     //#region Plugin
     function patchPlugin() {
@@ -513,6 +538,7 @@
             };
         }
         patch_SceneGlossary();
+        patch_TRP_CORE();
     };
     //#endregion
 
@@ -638,9 +664,11 @@
         if (TranslationManager._translationDisableDepth > 0) {
             return _Window_Base_convertEscapeCharacters.call(this, text);
         }
+        /*
         if (TranslationManager.shouldIgnore(this)) {
             return _Window_Base_convertEscapeCharacters.call(this, text);
         }
+        */
         const result = TranslationManager.translate(text);
         const converted = _Window_Base_convertEscapeCharacters.call(this, result);
         if (result !== text) TranslationManager.pushConvertedText(converted);
