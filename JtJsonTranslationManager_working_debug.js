@@ -211,6 +211,7 @@
                 text,
                 text
             );
+            this._pushRecent(text);
             return text;
         }
 

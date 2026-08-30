@@ -178,7 +178,10 @@
             return text;
         }
 
-        if (this._convertedTextSet.has(text)) return text;
+        if (this._convertedTextSet.has(text)) {
+            this._pushRecent(text); //sweet lil Bitmap smh
+            return text;
+        }
 
         // If text can be directly translated, do it
         if (this._dict[text]) {
@@ -200,7 +203,8 @@
             text = text.slice(leadingSpaces.length);
         }
         if (this._translatedSet.has(text)) {
-            this._pushRecent(text);
+            // this._pushRecent(text); 
+            // tbf im not sure abt this
             return detectStartWhitespace ? leadingSpaces + text : text;
         }
         if (this._dict[text]) {
@@ -555,7 +559,7 @@
         patch_TRP_CORE();
     };
     //#endregion
-    
+
     function registerSGCategoryTrans() {
         if (!TranslationManager._dict || !TranslationManager._lengthKeyDict) return;
 
