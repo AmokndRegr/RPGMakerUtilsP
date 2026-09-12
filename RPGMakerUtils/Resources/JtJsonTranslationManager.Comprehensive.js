@@ -545,6 +545,53 @@
         }
     }
 
+    //OriginalMessage.js
+    //MV
+    //RJ01676425 initial release
+    //tf zero metadata
+    function patch_OrignalMessage() {
+        if (typeof Game_Screen.prototype.OriginalMessage !== "function") return;
+        if (Game_Screen._jtOriginalMessagePatched) return;
+        Game_Screen._jtOriginalMessagePatched = true;
+
+        const _OriginalMessage = Game_Screen.prototype.OriginalMessage;
+
+        Game_Screen.prototype.OriginalMessage = function (name, message, type, position) {
+            name = TranslationManager.translate(name);
+            message = TranslationManager.translate(message);
+
+            const messageText = $gameMessage && $gameMessage._texts; //return left most falsy operand? wat?!
+            const oriLength = messageText ? messageText.length : 0;
+
+            _OriginalMessage.call(this, name, message, type, position);
+
+            if (messageText) {
+                for (let i = oriLength; i < messageText.length; i++) {
+                    TranslationManager.pushConvertedText(messageText[i])  //tha large window is surprisingly useful
+                }
+            }
+
+        };
+    }
+
+    //CompositeLimit.js
+    //MV
+    //RJ01676425 initial release
+    //obfuscated plugin, hope its how it works :/
+    function patch_TickerManager() {
+        if (typeof TickerManager === 'undefined') return;
+        if (TickerManager._jtPatched === true) return;
+
+        const _show = TickerManager.show;
+        if (typeof _show === 'function') {
+            TickerManager.show = function (text) {
+                _show.call(this, TranslationManager.translate(text));
+            }
+        }
+
+        TickerManager._jtPatched = true;
+    }
+
     //#region Plugin
     function patchPlugin() {
         // TextResource (RPG Maker MZ)
@@ -557,6 +604,8 @@
         }
         patch_SceneGlossary();
         patch_TRP_CORE();
+        patch_OrignalMessage();
+        patch_TickerManager();
     };
     //#endregion
 
