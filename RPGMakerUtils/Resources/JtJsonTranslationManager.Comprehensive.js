@@ -56,6 +56,7 @@
     TranslationManager._convertedTextMax = 128; //idk, probly not that intensive
 
     TranslationManager._translationDisableDepth = 0;
+    TranslationManager._CECDepth = 0;
 
     TranslationManager.isInitialized = function () {
         return this._dict !== null;
@@ -170,6 +171,16 @@
         }
         finally {
             this._translationDisableDepth--;
+        }
+    };
+
+    TranslationManager.enableValueTrans = function (callback) {
+        this._CECDepth++;
+        try {
+            return callback()
+        }
+        finally {
+            this._CECDepth--;
         }
     };
 
@@ -804,6 +815,14 @@
     //     }
     // };
 
+    //Base game function, it should be fine placed here?
+    const _Game_Variables_value = Game_Variables.prototype.value;
+    Game_Variables.prototype.value = function (variableId) {
+        const value = _Game_Variables_value.call(this, variableId);
+        if (TranslationManager._CECDepth > 0 && typeof value === 'string') { return TranslationManager.translate(value); };
+        return value;
+    };
+
     const _Window_Base_convertEscapeCharacters = Window_Base.prototype.convertEscapeCharacters;
     Window_Base.prototype.convertEscapeCharacters = function (text) {
         if (TranslationManager._translationDisableDepth > 0) {
@@ -814,10 +833,12 @@
             return _Window_Base_convertEscapeCharacters.call(this, text);
         }
         */
-        const result = TranslationManager.translate(text);
-        const converted = _Window_Base_convertEscapeCharacters.call(this, result);
-        if (result !== text) TranslationManager.pushConvertedText(converted);
-        return converted;
+        return TranslationManager.enableValueTrans(()=>{
+            const result = TranslationManager.translate(text);
+            const converted = _Window_Base_convertEscapeCharacters.call(this, result);
+            if (result !== text) TranslationManager.pushConvertedText(converted);
+            return converted;
+        });
     };
     //#endregion
 })();

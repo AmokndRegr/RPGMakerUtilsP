@@ -83,6 +83,7 @@
     TranslationManager._convertedTextMax = 128;
 
     TranslationManager._translationDisableDepth = 0;
+    TranslationManager._CECDepth = 0;
 
     TranslationManager.isInitialized = function () {
         return this._dict !== null;
@@ -197,7 +198,17 @@
         finally {
             this._translationDisableDepth--;
         }
-    }
+    };
+
+    TranslationManager.enableValueTrans = function (callback) {
+        this._CECDepth++;
+        try {
+            return callback()
+        }
+        finally {
+            this._CECDepth--;
+        }
+    };
 
     TranslationManager.translate = function (text, detectStartWhitespace = true, times = Number.POSITIVE_INFINITY, cache = true) {
         if (typeof text !== "string" || !this._dict) {
@@ -870,6 +881,18 @@
     //     }
     // };
 
+    const _Game_Variables_value = Game_Variables.prototype.value;
+    Game_Variables.prototype.value = function (variableId) {
+        const value = _Game_Variables_value.call(this, variableId);
+        if (TranslationManager._CECDepth > 0 && typeof value === 'string') {
+            const result = TranslationManager.translate(value);
+            TranslationManager.logTrace('variable translated', value, result, TranslationManager._CECDepth);
+            return result; 
+        };
+        TranslationManager.logTrace('variable raw', value, value);
+        return value;
+    };
+
     const _Window_Base_convertEscapeCharacters = Window_Base.prototype.convertEscapeCharacters;
     Window_Base.prototype.convertEscapeCharacters = function (text) {
         if (TranslationManager._translationDisableDepth > 0) {
@@ -882,13 +905,15 @@
             return _Window_Base_convertEscapeCharacters.call(this, text);
         }
         */
-        let result = TranslationManager.translate(text);
-        logTrace("window_base_convertescapecharacters_pre", text, result, Object.keys(this).slice(0, 20));
-        let converted = _Window_Base_convertEscapeCharacters.call(this, result);
-        if (result !== text) {
-            TranslationManager.pushConvertedText(converted)
-        }
-        return converted;
+        return TranslationManager.enableValueTrans(() => {
+            const result = TranslationManager.translate(text);
+            logTrace("window_base_convertescapecharacters_pre", text, result, Object.keys(this).slice(0, 20));
+            const converted = _Window_Base_convertEscapeCharacters.call(this, result);
+            if (result !== text) {
+                TranslationManager.pushConvertedText(converted)
+            }
+            return converted;
+        });
     };
     //#endregion
 
