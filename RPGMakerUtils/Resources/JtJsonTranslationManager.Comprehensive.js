@@ -55,8 +55,9 @@
     TranslationManager._convertedTextQueue = [];
     TranslationManager._convertedTextMax = 128; //idk, probly not that intensive
 
-    TranslationManager._translationDisableDepth = 0;
-    TranslationManager._CECDepth = 0;
+    TranslationManager._translationDisableDepth = 0; //fully disable trans
+    TranslationManager._CECDepth = 0; //enable value/variable trans
+    TranslationManager._translatedSkipDepth = 0; //disable trans but retain value/variable trans
 
     TranslationManager.isInitialized = function () {
         return this._dict !== null;
@@ -177,10 +178,20 @@
     TranslationManager.enableValueTrans = function (callback) {
         this._CECDepth++;
         try {
-            return callback()
+            return callback();
         }
         finally {
             this._CECDepth--;
+        }
+    };
+
+    TranslationManager.skipPluginTrans = function (callback) {
+        this._translatedSkipDepth++;
+        try {
+            return callback();
+        }
+        finally {
+            this._translatedSkipDepth--;
         }
     };
 
@@ -603,6 +614,30 @@
         TickerManager._jtPatched = true;
     }
 
+    //TorigoyaMZ_NotifyMessage_AddonGetItem.js
+    //1.3.0
+    //MZ
+    function patch_TorigoyaMZ_NotifyMessage_AddonGetItem() {
+        const addon = window.Torigoya && window.Torigoya.NotifyMessage && window.Torigoya.NotifyMessage.Addons
+            ? window.Torigoya.NotifyMessage.Addons.GetItem
+            : null;
+        if (!addon || !addon.parameter || addon._jtPatched) return;
+        //plugin itself is kinda weird
+
+        const parameter = addon.parameter;
+        parameter.baseGainSingleMessage = TranslationManager.translate(parameter.baseGainSingleMessage);
+        parameter.baseGainMultiMessage = TranslationManager.translate(parameter.baseGainMultiMessage);
+
+        const _notifyGainItem = addon.notifyGainItem;
+        addon.notifyGainItem = function (item, count) {
+            return TranslationManager.skipPluginTrans(() => {
+                _notifyGainItem.call(this, item, count);
+            })
+        }
+
+        addon._jtPatched = true;
+    }
+
     //#region Plugin
     function patchPlugin() {
         // TextResource (RPG Maker MZ)
@@ -617,6 +652,7 @@
         patch_TRP_CORE();
         patch_OrignalMessage();
         patch_TickerManager();
+        patch_TorigoyaMZ_NotifyMessage_AddonGetItem();
     };
     //#endregion
 
@@ -771,6 +807,9 @@
     // Window_Base.drawText is implemented in terms of Bitmap.drawText, so patching Bitmap.drawText should cover most cases.
     const _Bitmap_drawText = Bitmap.prototype.drawText;
     Bitmap.prototype.drawText = function (text, x, y, maxWidth, lineHeight, align) {
+        if (TranslationManager._translationDisableDepth > 0 || TranslationManager._translatedSkipDepth > 0) {
+            return _Bitmap_drawText.call(this, text, x, y, maxWidth, lineHeight, align);
+        }
         if (typeof (text) === 'string') {
             if (TranslationManager._inRecent(text)) {
                 return _Bitmap_drawText.call(this, text, x, y, maxWidth, lineHeight, align);
@@ -784,6 +823,9 @@
 
     const _Bitmap_measureTextWidth = Bitmap.prototype.measureTextWidth;
     Bitmap.prototype.measureTextWidth = function (text) {
+        if (TranslationManager._translationDisableDepth > 0 || TranslationManager._translatedSkipDepth > 0) {
+            return _Bitmap_measureTextWidth.call(this, text);
+        }
         if (typeof (text) === 'string') {
             if (TranslationManager._inRecent(text)) {
                 return _Bitmap_measureTextWidth.call(this, text);
@@ -827,13 +869,25 @@
     Window_Base.prototype.convertEscapeCharacters = function (text) {
         if (TranslationManager._translationDisableDepth > 0) {
             return _Window_Base_convertEscapeCharacters.call(this, text);
-        }
+        };
         /*
         if (TranslationManager.shouldIgnore(this)) {
             return _Window_Base_convertEscapeCharacters.call(this, text);
         }
         */
-        return TranslationManager.enableValueTrans(()=>{
+        if (TranslationManager._translatedSkipDepth > 0) {
+            return TranslationManager.enableValueTrans(() => {
+                const result = _Window_Base_convertEscapeCharacters.call(this, text);
+                if (result !== text) {
+                    TranslationManager.pushConvertedText(result);
+                    //for general usage d better push it ig?
+                    //but this ones under logic of 'do it since its expanding variables'
+                    //does it apply to the lower one tho
+                }
+                return result;
+            });
+        };
+        return TranslationManager.enableValueTrans(() => {
             const result = TranslationManager.translate(text);
             const converted = _Window_Base_convertEscapeCharacters.call(this, result);
             if (result !== text) TranslationManager.pushConvertedText(converted);
