@@ -789,6 +789,8 @@
     };
 
     // Message window text
+    // Going through CEC anyway so obsolete ig?
+    /*
     const _Window_Message_startMessage = Window_Message.prototype.startMessage;
     Window_Message.prototype.startMessage = function () {
         for (let i = 0; i < $gameMessage._texts.length; i++) {
@@ -796,6 +798,7 @@
         }
         _Window_Message_startMessage.call(this);
     };
+    */
 
     // Battle log text ??
     const _Window_BattleLog_addText = Window_BattleLog.prototype.addText;
