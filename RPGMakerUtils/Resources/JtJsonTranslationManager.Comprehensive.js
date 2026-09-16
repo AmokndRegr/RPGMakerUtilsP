@@ -638,6 +638,23 @@
         addon._jtPatched = true;
     }
 
+    //PictureAnimation.js
+    //1.6.1
+    //MV
+    function patch_PictureAnimation() {
+        if (typeof Game_Interpreter.prototype.pluginCommandPictureAnimation !== 'function') return;
+        if (Game_Interpreter._jtPictureAnimationPatched === true) return;
+
+        const _pluginCommandPictureAnimation = Game_Interpreter.prototype.pluginCommandPictureAnimation;
+        Game_Interpreter.prototype.pluginCommandPictureAnimation = function (command, args) {
+            return TranslationManager.disablePluginTrans(() => {
+                _pluginCommandPictureAnimation.call(this, command, args)
+            })
+        }
+
+        Game_Interpreter._jtPictureAnimationPatched = true;
+    }
+
     //#region Plugin
     function patchPlugin() {
         // TextResource (RPG Maker MZ)
@@ -653,6 +670,7 @@
         patch_OrignalMessage();
         patch_TickerManager();
         patch_TorigoyaMZ_NotifyMessage_AddonGetItem();
+        patch_PictureAnimation();
     };
     //#endregion
 
