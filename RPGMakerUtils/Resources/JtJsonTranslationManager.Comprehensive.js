@@ -614,6 +614,37 @@
         TickerManager._jtPatched = true;
     }
 
+    //TorigoyaMZ_NotifyMessage.js
+    //1.6.2
+    //MZ
+    //not rlly necessary, take it as a showcase xd
+    function patch_TorigoyaMZ_NotifyMessage() {
+        const manager = window.Torigoya && window.Torigoya.NotifyMessage
+            ? window.Torigoya.NotifyMessage.Manager
+            : null;
+        if (!manager || manager._jtPatched) return;
+
+        const _setupWindow = manager._setupWindow;
+        if (typeof _setupWindow !== 'function') return;
+
+        manager._setupWindow = function (notifyItem) {
+            if (notifyItem &&
+                typeof notifyItem.message === 'string' &&
+                TranslationManager._translatedSkipDepth === 0 &&
+                !notifyItem._jtMessageTranslated
+            ) {
+                notifyItem.message = TranslationManager.translate(notifyItem.message);
+                notifyItem._jtMessageTranslated = true;
+            }
+
+            return TranslationManager.skipPluginTrans(() => {
+                return _setupWindow.call(this, notifyItem);
+            })
+        }
+
+        manager._jtPatched = true;
+    }
+
     //TorigoyaMZ_NotifyMessage_AddonGetItem.js
     //1.3.0
     //MZ
@@ -627,11 +658,18 @@
         const parameter = addon.parameter;
         parameter.baseGainSingleMessage = TranslationManager.translate(parameter.baseGainSingleMessage);
         parameter.baseGainMultiMessage = TranslationManager.translate(parameter.baseGainMultiMessage);
+        parameter.baseGainMoneyMessage = TranslationManager.translate(parameter.baseGainMoneyMessage);
 
         const _notifyGainItem = addon.notifyGainItem;
         addon.notifyGainItem = function (item, count) {
             return TranslationManager.skipPluginTrans(() => {
                 _notifyGainItem.call(this, item, count);
+            })
+        }
+
+        const _notifyGainMoney = function (value) {
+            return TranslationManager.skipPluginTrans(() => {
+                _notifyGainMoney.call(this, value);
             })
         }
 
@@ -670,6 +708,7 @@
         patch_OrignalMessage();
         patch_TickerManager();
         patch_TorigoyaMZ_NotifyMessage_AddonGetItem();
+        patch_TorigoyaMZ_NotifyMessage();
         patch_PictureAnimation();
     };
     //#endregion
