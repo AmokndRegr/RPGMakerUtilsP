@@ -693,6 +693,42 @@
         Game_Interpreter._jtPictureAnimationPatched = true;
     }
 
+    //SimpleVoice.js
+    //1.3.0
+    //MV
+    //Maybe we need a plugin builder rn...
+    function patch_SimpleVoice() {
+        if (typeof Game_Interpreter.prototype.execPlayVoice !== 'function') return;
+        if (Game_Interpreter._jtSimpleVoicePatched) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const simpleVoiceCommands = new Set([
+            'SV_ボイスの演奏',
+            'SV_PLAY_VOICE',
+            'SV_ボイスのループ演奏',
+            'SV_PLAY_LOOP_VOICE',
+            'SV_ボイスの停止',
+            'SV_STOP_VOICE',
+            'SV_ボイスの演奏の予約',
+            'SV_RESERVE_VOICE',
+            'SV_ボイスのループ演奏の予約',
+            'SV_RESERVE_LOOP_VOICE'
+        ].map(command => command.toUpperCase()));
+
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (simpleVoiceCommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommand.call(this, command, args);
+                })
+            }
+
+            _pluginCommand.call(this, command, args);
+        }
+
+        Game_Interpreter._jtSimpleVoicePatched = true;
+    }
+
     //#region Plugin
     function patchPlugin() {
         // TextResource (RPG Maker MZ)
@@ -710,6 +746,7 @@
         patch_TorigoyaMZ_NotifyMessage_AddonGetItem();
         patch_TorigoyaMZ_NotifyMessage();
         patch_PictureAnimation();
+        patch_SimpleVoice();
     };
     //#endregion
 
