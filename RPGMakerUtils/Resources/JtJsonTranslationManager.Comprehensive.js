@@ -799,6 +799,23 @@
         Game_Interpreter._jtSystemSoundCustomizePatched = true;
     }
 
+    //TF_LayeredMap.js
+    //1.0.4.0
+    //MV
+    //Wish this plugin gud luck in terms of compatibility itself
+    function patch_TF_LayeredMap() {
+        if (typeof Game_Variables.prototype.valueByName !== 'function') return;
+        if (Game_Variables._jtTFLayeredMapPatched) return;
+
+        const _valueByName = Game_Variables.prototype.valueByName;
+        Game_Variables.prototype.valueByName = function (name) {
+            const result = TranslationManager.translate(name);
+            return _valueByName.call(this, result);
+        }
+
+        Game_Variables._jtTFLayeredMapPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -821,6 +838,7 @@
         patch_SimpleVoice();
         patch_PictureVariableSetting();
         patch_SystemSoundCustomize();
+        patch_TF_LayeredMap();
     };
     //#endregion
 
