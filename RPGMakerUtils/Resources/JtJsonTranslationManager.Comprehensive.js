@@ -734,9 +734,9 @@
     //PictureVariableSetting.js
     //1.5.3
     //MV
-    function patch_PictureVariableSetting(){
+    function patch_PictureVariableSetting() {
         if (typeof Game_Interpreter.prototype.transPictureNumber !== 'function') return;
-        if(Game_Interpreter._jtPictureVariableSettingPatched) return;
+        if (Game_Interpreter._jtPictureVariableSettingPatched) return;
 
         const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
 
@@ -755,9 +755,9 @@
             'P_OUT_OF_SCREEN_SHAKE_OFF'
         ])
 
-        Game_Interpreter.prototype.pluginCommand = function(command, args){
-            if(PictureVariableSettingCommands.has(String(command).toUpperCase())){
-                return TranslationManager.disablePluginTrans(()=>{
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (PictureVariableSettingCommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
                     _pluginCommand.call(this, command, args)
                 })
             }
@@ -766,6 +766,37 @@
         }
 
         Game_Interpreter._jtPictureVariableSettingPatched = true;
+    }
+
+    //SystemSoundCustomize.js
+    //1.0.0
+    //MV
+    function patch_SystemSoundCustomize() {
+        if (typeof Game_Interpreter.prototype.execChangeSystemSe !== 'function' ||
+            typeof Game_Interpreter.prototype.execResetSystemSe !== 'function'
+        ) return;
+        if (Game_Interpreter._jtSystemSoundCustomizePatched) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const SystemSoundCustomizeCommands = new Set([
+            'SSC_CHANGE_SYSTEM_SE',
+            'SSC_システム効果音変更',
+            'SSC_RESET_SYSTEM_SE',
+            'SSC_システム効果音削除'
+        ])
+
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (SystemSoundCustomizeCommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommand.call(this, command, args);
+                })
+            }
+
+            _pluginCommand.call(this, command, args);
+        }
+
+        Game_Interpreter._jtSystemSoundCustomizePatched = true;
     }
 
     //#endregion
@@ -789,6 +820,7 @@
         patch_PictureAnimation();
         patch_SimpleVoice();
         patch_PictureVariableSetting();
+        patch_SystemSoundCustomize();
     };
     //#endregion
 
