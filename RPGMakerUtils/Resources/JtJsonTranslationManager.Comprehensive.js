@@ -432,7 +432,7 @@
                 if (actor.name) actor.name = TranslationManager.translate(actor.name);
                 if (actor.profile) actor.profile = TranslationManager.translate(actor.profile);
                 if (actor.nickname) actor.nickname = TranslationManager.translate(actor.nickname);
-                if (actor.note) actor.note = TranslationManager.translate(actor.note, times = 1);
+                //if (actor.note) actor.note = TranslationManager.translate(actor.note, times = 1);
             });
         }
 
@@ -444,7 +444,7 @@
                     if (!item) return;
                     if (item.name) item.name = TranslationManager.translate(item.name);
                     if (item.description) item.description = TranslationManager.translate(item.description);
-                    if (item.note) item.note = TranslationManager.translate(item.note, times = 1);
+                    //if (item.note) item.note = TranslationManager.translate(item.note, times = 1);
                     if (item.preName) item.preName = item.name;
                     if (item.preDescription) item.preDescription = item.description; // for ItemNameEscape.js
                 });
@@ -456,9 +456,26 @@
             $dataEnemies.forEach(enemy => {
                 if (!enemy) return;
                 if (enemy.name) enemy.name = TranslationManager.translate(enemy.name);
-                if (enemy.note) enemy.note = TranslationManager.translate(enemy.note, times = 1);
+                //if (enemy.note) enemy.note = TranslationManager.translate(enemy.note, times = 1);
             });
         }
+
+        /*
+        I don want to handle all those reserved keys anymore.
+        Lets see how it goes w/o this free field.
+        But welp for ref:
+        ConditionallyCore.js
+        Pon_BattleGainVariable.js
+        DynamicDatabase.js
+        StatusBustImage.js
+        SealActorCommand.js
+        FTKR_CustomSimpleActorStatus.js
+        SceneGlossary.js
+        TermsOfSkillUse.js
+
+        Also hope nobody d use TextManager.basic/param conditions in ConditionallyCore.js.
+        TextManager.param[n] isnt even legal ig.
+        */
 
         if ($dataSystem) {
             // Translate the System terms and messages
