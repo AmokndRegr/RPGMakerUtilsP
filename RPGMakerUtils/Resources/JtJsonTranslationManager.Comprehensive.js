@@ -519,6 +519,7 @@
     };
     //#endregion
 
+    //#region plugin patches
     //SceneGlossary.js 
     //2.15.0 
     //MV
@@ -661,13 +662,14 @@
         parameter.baseGainMoneyMessage = TranslationManager.translate(parameter.baseGainMoneyMessage);
 
         const _notifyGainItem = addon.notifyGainItem;
+        const _notifyGainMoney = addon.notifyGainMoney;
         addon.notifyGainItem = function (item, count) {
             return TranslationManager.skipPluginTrans(() => {
                 _notifyGainItem.call(this, item, count);
             })
         }
 
-        const _notifyGainMoney = function (value) {
+        addon.notifyGainMoney = function (value) {
             return TranslationManager.skipPluginTrans(() => {
                 _notifyGainMoney.call(this, value);
             })
@@ -729,6 +731,45 @@
         Game_Interpreter._jtSimpleVoicePatched = true;
     }
 
+    //PictureVariableSetting.js
+    //1.5.3
+    //MV
+    function patch_PictureVariableSetting(){
+        if (typeof Game_Interpreter.prototype.transPictureNumber !== 'function') return;
+        if(Game_Interpreter._jtPictureVariableSettingPatched) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const PictureVariableSettingCommands = new Set([
+            'P_VARIABLE_VALID',
+            'P_VARIABLE_INVALID',
+            'P_D_FILENAME',
+            'P_TARGET_ALL',
+            'P_TARGET_RANGE',
+            'P_TARGET_MULTI',
+            'P_SPIN',
+            'P_SPIN_RELATIVE',
+            'P_SHAKE',
+            'P_STOP_SHAKE',
+            'P_OUT_OF_SCREEN_SHAKE_ON',
+            'P_OUT_OF_SCREEN_SHAKE_OFF'
+        ])
+
+        Game_Interpreter.prototype.pluginCommand = function(command, args){
+            if(PictureVariableSettingCommands.has(String(command).toUpperCase())){
+                return TranslationManager.disablePluginTrans(()=>{
+                    _pluginCommand.call(this, command, args)
+                })
+            }
+
+            _pluginCommand.call(this, command, args)
+        }
+
+        Game_Interpreter._jtPictureVariableSettingPatched = true;
+    }
+
+    //#endregion
+
     //#region Plugin
     function patchPlugin() {
         // TextResource (RPG Maker MZ)
@@ -747,6 +788,7 @@
         patch_TorigoyaMZ_NotifyMessage();
         patch_PictureAnimation();
         patch_SimpleVoice();
+        patch_PictureVariableSetting();
     };
     //#endregion
 
