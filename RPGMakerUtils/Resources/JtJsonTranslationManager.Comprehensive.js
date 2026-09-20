@@ -865,6 +865,59 @@
         Game_BattlerBase._jtRestrictionTargetSkillPatched = true;
     }
 
+    //SelfSwitchTemporary.js
+    //2.0.1
+    //MV
+    //No trans needed anyway
+    function patch_SelfSwitchTemporary() {
+        if (typeof Game_SelfSwitches.prototype.appendTemporary !== 'function' ||
+            typeof Game_SelfSwitches.prototype.clearTemporary !== 'function' ||
+            typeof Game_Event.prototype.addTemporarySelfSwitch !== 'function'
+        ) return;
+        if (Game_SelfSwitches._jtSelfSwitchTemporaryPatched) return;
+
+        const _add = Game_Event.prototype.addTemporarySelfSwitch;
+        Game_Event.prototype.addTemporarySelfSwitch = function () {
+            return TranslationManager.disablePluginTrans(() => {
+                _add.call(this);
+            })
+        }
+
+        Game_SelfSwitches._jtSelfSwitchTemporaryPatched = true;
+    }
+
+    //DTextPicture.js
+    //1.19.0
+    //MV
+    //idk wheres the translateIfNeed specs at
+    function patch_DTextPicture() {
+        if (typeof Game_Interpreter.prototype.pluginCommandDTextPicture !== 'function') return;
+        if (Game_Interpreter._jtDTextPicturePatched) return;
+
+        var getCommandName = function (command) {
+            return (command || '').toUpperCase();
+        };
+
+        const _pluginCommandDTextPicture = Game_Interpreter.prototype.pluginCommandDTextPicture;
+        Game_Interpreter.prototype.pluginCommandDTextPicture = function (command, args) {
+            switch (getCommandName(command)) {
+                case 'D_TEXT':
+                    _pluginCommandDTextPicture.call(this, command, args);
+                    break;
+                case 'D_TEXT_SETTING':
+                case 'D_TEXT_WINDOW_CURSOR':
+                case 'D_TEXT_WINDOW_CURSOR_ACTIVE':
+                    return TranslationManager.disablePluginTrans(() => {
+                        _pluginCommandDTextPicture.call(this, command, args);
+                    });
+                default:
+                    _pluginCommandDTextPicture.call(this, command, args);
+            }
+        }
+
+        Game_Interpreter._jtDTextPicturePatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -889,6 +942,8 @@
         patch_SystemSoundCustomize();
         patch_TF_LayeredMap();
         patch_RestrictionTargetSkill();
+        patch_SelfSwitchTemporary();
+        patch_DTextPicture();
     };
     //#endregion
 
