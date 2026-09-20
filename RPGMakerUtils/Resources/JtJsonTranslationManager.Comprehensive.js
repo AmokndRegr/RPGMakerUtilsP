@@ -833,6 +833,38 @@
         Game_Variables._jtTFLayeredMapPatched = true;
     }
 
+    //RestrictionTargetSkill.js
+    //1.2.2
+    //MV
+    function patch_RestrictionTargetSkill() {
+        if (typeof Game_BattlerBase.prototype.canSelectTarget !== 'function' ||
+            typeof Game_Actor.prototype.canSelectTarget !== 'function' ||
+            typeof Game_Enemy.prototype.canSelectTarget !== 'function'
+        ) return;
+        if (Game_BattlerBase._jtRestrictionTargetSkillPatched) return;
+
+        const _battler = Game_BattlerBase.prototype.canSelectTarget;
+        const _actor = Game_Actor.prototype.canSelectTarget;
+        const _enemy = Game_Enemy.prototype.canSelectTarget;
+        Game_BattlerBase.prototype.canSelectTarget = function (item, user) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _battler.call(this, item, user);
+            })
+        };
+        Game_Actor.prototype.canSelectTarget = function (item, user) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _actor.call(this, item, user);
+            })
+        };
+        Game_Enemy.prototype.canSelectTarget = function (item, user) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _enemy.call(this, item, user);
+            })
+        };
+
+        Game_BattlerBase._jtRestrictionTargetSkillPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -856,6 +888,7 @@
         patch_PictureVariableSetting();
         patch_SystemSoundCustomize();
         patch_TF_LayeredMap();
+        patch_RestrictionTargetSkill();
     };
     //#endregion
 
