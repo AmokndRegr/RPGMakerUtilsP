@@ -1106,6 +1106,23 @@
 
         Game_Interpreter._jtDTextPicturePatched = true;
     }
+    
+    //Chronus.js
+    //1.18.0
+    //MV
+    function patch_Chronus() {
+        if (typeof Game_Interpreter.prototype.pluginCommandChronus !== 'function') return;
+        if (Game_Interpreter._jtChronusPatched) return;
+
+        const _pluginCommandChronus = Game_Interpreter.prototype.pluginCommandChronus;
+        Game_Interpreter.prototype.pluginCommandChronus = function (command, args) {
+            return TranslationManager.disablePluginTrans(() => {
+                _pluginCommandChronus.call(this, command, args);
+            })
+        }
+
+        Game_Interpreter._jtChronusPatched = true;
+    }
 
     //#endregion
 
@@ -1133,6 +1150,7 @@
         patch_RestrictionTargetSkill();
         patch_SelfSwitchTemporary();
         patch_DTextPicture();
+        patch_Chronus();
     };
     //#endregion
 
