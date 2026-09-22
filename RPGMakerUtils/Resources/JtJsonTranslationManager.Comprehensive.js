@@ -1106,7 +1106,7 @@
 
         Game_Interpreter._jtDTextPicturePatched = true;
     }
-    
+
     //Chronus.js
     //1.18.0
     //MV
@@ -1122,6 +1122,23 @@
         }
 
         Game_Interpreter._jtChronusPatched = true;
+    }
+
+    //MKR_PlayerSensor.js
+    //
+    //MV
+    function patch_MKR_PlayerSensor() {
+        if (typeof Game_Event.prototype.isFoundPlayer !== "function") return;
+        if (Game_Event._jtMKR_PlayerSensorPatched) return;
+
+        const _isFoundPlayer = Game_Event.prototype.isFoundPlayer;
+        Game_Event.prototype.isFoundPlayer = function () {
+            return TranslationManager.disablePluginTrans(() => {
+                return _isFoundPlayer();
+            })
+        }
+
+        Game_Event._jtMKR_PlayerSensorPatched = true;
     }
 
     //#endregion
@@ -1151,6 +1168,7 @@
         patch_SelfSwitchTemporary();
         patch_DTextPicture();
         patch_Chronus();
+        patch_MKR_PlayerSensor();
     };
     //#endregion
 
