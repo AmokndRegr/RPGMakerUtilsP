@@ -1125,7 +1125,7 @@
     }
 
     //MKR_PlayerSensor.js
-    //
+    //3.1.1
     //MV
     function patch_MKR_PlayerSensor() {
         if (typeof Game_Event.prototype.isFoundPlayer !== "function") return;
@@ -1139,6 +1139,27 @@
         }
 
         Game_Event._jtMKR_PlayerSensorPatched = true;
+    }
+
+    //MakeScreenCapture.js
+    //1.8.0
+    //MV
+    function patch_MakeScreenCapture() {
+        if (typeof Game_Interpreter.prototype.pluginCommandMakeScreenCapture !== 'function') return;
+        if (Game_Interpreter._jtMakeScreenCapture) return;
+
+        const _pluginCommandMakeScreenCapture = Game_Interpreter.prototype.pluginCommandMakeScreenCapture;
+        const _signAndSave = Bitmap.prototype.signAndSave;
+        Game_Interpreter.prototype.pluginCommandMakeScreenCapture = function (command, args) {
+            return TranslationManager.disablePluginTrans(() => {
+                _pluginCommandMakeScreenCapture.call(this, command, args);
+            })
+        }
+        Bitmap.prototype.signAndSave = function (signature, fileName, format, signatureImage) {
+            return TranslationManager.disablePluginTrans(() => {
+                _signAndSave.call(this, signature, fileName, format, signatureImage);
+            })
+        }
     }
 
     //#endregion
@@ -1169,6 +1190,7 @@
         patch_DTextPicture();
         patch_Chronus();
         patch_MKR_PlayerSensor();
+        patch_MakeScreenCapture();
     };
     //#endregion
 
