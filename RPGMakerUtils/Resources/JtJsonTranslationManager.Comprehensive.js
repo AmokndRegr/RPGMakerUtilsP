@@ -1162,6 +1162,30 @@
         }
     }
 
+    //MessageWindowPopup.js
+    //2.16.3
+    //MV
+    //setPopupShakePosition should be fine
+    function patch_MessageWindowPopup() {
+        if (typeof Game_Interpreter.prototype.pluginCommandMessageWindowPopup !== 'function') return;
+        if (Game_Interpreter._jtMessageWindowPopupPatched) return;
+
+        const _pluginCommandMessageWindowPopup = Game_Interpreter.prototype.pluginCommandMessageWindowPopup;
+        const _getEventIdForMessagePopup = Game_Interpreter.prototype.getEventIdForMessagePopup;
+        Game_Interpreter.prototype.pluginCommandMessageWindowPopup = function (command, args) {
+            return TranslationManager.disablePluginTrans(() => {
+                _pluginCommandMessageWindowPopup.call(this, command, args);
+            })
+        }
+        Game_Interpreter.prototype.getEventIdForMessagePopup = function (arg) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _getEventIdForMessagePopup.call(this, arg);
+            })
+        }
+
+        Game_Interpreter._jtMessageWindowPopupPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1191,6 +1215,7 @@
         patch_Chronus();
         patch_MKR_PlayerSensor();
         patch_MakeScreenCapture();
+        patch_MessageWindowPopup();
     };
     //#endregion
 
