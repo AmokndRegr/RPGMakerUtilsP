@@ -59,6 +59,19 @@
     TranslationManager._CECDepth = 0; //enable value/variable trans
     TranslationManager._translatedSkipDepth = 0; //disable trans but retain value/variable trans
 
+    TranslationManager._rawDataDepth = 0;
+    TranslationManager._dataFieldStates = new WeakMap();
+    /*
+    WeakMap<
+        Object,
+        Map<
+            PropertyKey,{
+            raw: any,
+            translated: any
+        }>
+    >
+    */
+
     TranslationManager.isInitialized = function () {
         return this._dict !== null;
     };
@@ -193,6 +206,147 @@
         finally {
             this._translatedSkipDepth--;
         }
+    };
+
+    TranslationManager.fetchRawData = function (callback) {
+        this._rawDataDepth++;
+        try {
+            return callback();
+        }
+        finally {
+            this._rawDataDepth--;
+        }
+    };
+
+    TranslationManager.isRawData = function () {
+        return this._rawDataDepth > 0;
+    }
+
+    TranslationManager.bindDataField = function (target, property) {
+        if (!target) return null;
+
+        const key = String(property);
+        let fields = this._dataFieldStates.get(target);
+
+        if (!fields) {
+            fields = new Map();
+            this._dataFieldStates.set(target, fields);
+        };
+
+        if (fields.has(key)) {
+            return fields.get(key);
+        };
+
+        const descriptor = Object.getOwnPropertyDescriptor(target, key);
+
+        if (!descriptor ||
+            !descriptor.configurable ||
+            !Object.prototype.hasOwnProperty.call(descriptor, "value")
+        ) {
+            return null;
+        }
+
+        const field = {
+            raw: descriptor.value,
+            translated: descriptor.value
+        };
+
+        fields.set(key, field);
+
+        Object.defineProperty(target, key, {
+            configurable: true,
+            enumerable: descriptor.enumerable,
+
+            get: function () {
+                return TranslationManager.isRawData()
+                    ? field.raw
+                    : field.translated;
+            },
+
+            set: function (value) {
+                if (TranslationManager.isRawData()) {
+                    field.raw = value;
+                    field.translated = TranslationManager.translate(value);
+                }
+                else {
+                    field.translated = value;
+                }
+            }
+        });
+
+        return field;
+    };
+
+    TranslationManager.setTranslatedData = function (target, property, value) {
+        const field = this.bindDataField(target, property);
+
+        if (field) {
+            field.translated = value;
+        }
+        else {
+            target[property] = value;
+        }
+
+        return value;
+    };
+
+    TranslationManager.setDataField = function (
+        target, property, rawValue, translatedValue
+    ) {
+        const field = this.bindDataField(target, property);
+
+        if (field) {
+            field.raw = rawValue;
+            field.translated = translatedValue;
+        }
+        else {
+            target[property] = translatedValue;
+        }
+
+        return translatedValue;
+    };
+
+    TranslationManager.getRawData = function (target, property) {
+        const fields = target && this._dataFieldStates.get(target);
+        const field = fields && fields.get(String(property));
+
+        return field ? field.raw : target && target[property];
+    };
+
+    TranslationManager.getTranslatedData = function (target, property) {
+        const fields = target && this._dataFieldStates.get(target);
+        const field = fields && fields.get(String(property));
+
+        return field ? field.translated : target && target[property];
+    };
+
+    TranslationManager.translateDataField = function (target, property) {
+        const field = this.bindDataField(target, property);
+
+        if (!field) {
+            return undefined;
+        }
+
+        field.translated = this.translate(field.raw);
+        return field.translated;
+    };
+
+    TranslationManager.bindDataArray = function (array) {
+        if (!array) return;
+
+        for (let i = 0; i < array.length; i++) {
+            if (Object.prototype.hasOwnProperty.call(array, i)) {
+                this.bindDataField(array, i);
+            }
+        };
+    };
+
+    TranslationManager.bindDataObject = function (object) {
+        if (!object) return;
+
+        Object.keys(object).forEach(function (key) {
+            TranslationManager.bindDataField(object, key);
+        });
     };
 
     TranslationManager.translate = function (text, detectStartWhitespace = true, times = Number.POSITIVE_INFINITY, cache = true) {
@@ -416,11 +570,16 @@
     };
 
     TranslationManager.translateCommonData = function () {
+        const tField = function (object, key) {
+            return TranslationManager.translateDataField(object, key);
+        };
+
         // Translate map names in $dataMapInfos
         if ($dataMapInfos) {
             $dataMapInfos.forEach(mapInfo => {
                 if (mapInfo && mapInfo.name) {
-                    mapInfo.name = TranslationManager.translate(mapInfo.name);
+                    //mapInfo.name = TranslationManager.translate(mapInfo.name);
+                    tField(mapInfo, "name");
                 }
             });
         }
@@ -429,7 +588,8 @@
         if ($dataActors) {
             $dataActors.forEach(actor => {
                 if (!actor) return;
-                if (actor.name) actor.name = TranslationManager.translate(actor.name);
+                //if (actor.name) actor.name = TranslationManager.translate(actor.name);
+                if (actor.name) tField(actor, "name");
                 if (actor.profile) actor.profile = TranslationManager.translate(actor.profile);
                 if (actor.nickname) actor.nickname = TranslationManager.translate(actor.nickname);
                 //if (actor.note) actor.note = TranslationManager.translate(actor.note, times = 1);
@@ -442,8 +602,10 @@
             if (data) {
                 data.forEach(item => {
                     if (!item) return;
-                    if (item.name) item.name = TranslationManager.translate(item.name);
-                    if (item.description) item.description = TranslationManager.translate(item.description);
+                    //if (item.name) item.name = TranslationManager.translate(item.name);
+                    if (item.name) tField(item, "name");
+                    //if (item.description) item.description = TranslationManager.translate(item.description);
+                    if (item.description) tField(item, "description");
                     //if (item.note) item.note = TranslationManager.translate(item.note, times = 1);
                     if (item.preName) item.preName = item.name;
                     if (item.preDescription) item.preDescription = item.description; // for ItemNameEscape.js
@@ -481,9 +643,18 @@
             // Translate the System terms and messages
             if ($dataSystem.terms) {
                 if ($dataSystem.terms.basic) {
+                    TranslationManager.bindDataArray($dataSystem.terms.basic);
+                    $dataSystem.terms.basic.forEach(function (_, index) {
+                        tField(
+                            $dataSystem.terms.basic,
+                            index
+                        );
+                    });
+                    /*
                     $dataSystem.terms.basic.forEach((term, i) => {
                         $dataSystem.terms.basic[i] = TranslationManager.translate(term);
                     });
+                    */
                 }
                 if ($dataSystem.terms.commands) {
                     $dataSystem.terms.commands.forEach((term, i) => {
@@ -491,11 +662,29 @@
                     });
                 }
                 if ($dataSystem.terms.params) {
+                    TranslationManager.bindDataArray($dataSystem.terms.params);
+                    $dataSystem.terms.params.forEach(function (_, index) {
+                        tField(
+                            $dataSystem.terms.params,
+                            index
+                        );
+                    });
+                    /*
                     $dataSystem.terms.params.forEach((term, i) => {
                         $dataSystem.terms.params[i] = TranslationManager.translate(term);
                     });
+                    */
                 }
                 if ($dataSystem.terms.messages) {
+                    /*
+                    TranslationManager.bindDataObject($dataSystem.terms.messages);
+                    Object.keys($dataSystem.terms.messages).forEach(function (key) {
+                        tField(
+                            $dataSystem.terms.messages,
+                            key
+                        );
+                    });
+                    */
                     for (let key in $dataSystem.terms.messages) {
                         $dataSystem.terms.messages[key] = TranslationManager.translate($dataSystem.terms.messages[key]);
                     }
