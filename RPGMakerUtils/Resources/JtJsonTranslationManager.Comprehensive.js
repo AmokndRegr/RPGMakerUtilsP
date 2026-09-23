@@ -1186,6 +1186,30 @@
         Game_Interpreter._jtMessageWindowPopupPatched = true;
     }
 
+    //TraceEvent.js
+    //1.2.0
+    //MV
+    function patch_TraceEvent() {
+        if (typeof Game_Map.prototype.filterEventsByName !== 'function' ||
+            typeof Game_Map.prototype.filterEventsByTag !== 'function'
+        ) return;
+        if (Game_Map._jtTraceEventPatched) return;
+
+        const _filterByName = Game_Map.prototype.filterEventsByName;
+        const _filterByTag = Game_Map.prototype.filterEventsByTag;
+        Game_Map.prototype.filterEventsByName = function (name, selfEvent) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _filterByName.call(this, name, selfEvent);
+            })
+        };
+        Game_Map.prototype.filterEventsByTag = function (tagName, selfEvent) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _filterByTag.call(this, tagName, selfEvent);
+            })
+        };
+        Game_Map._jtTraceEventPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1216,6 +1240,7 @@
         patch_MKR_PlayerSensor();
         patch_MakeScreenCapture();
         patch_MessageWindowPopup();
+        patch_TraceEvent();
     };
     //#endregion
 
