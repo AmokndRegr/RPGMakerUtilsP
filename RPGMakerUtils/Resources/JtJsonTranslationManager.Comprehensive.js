@@ -693,19 +693,37 @@
 
             // Also variable and switch names
             if ($dataSystem.variables) {
+                TranslationManager.bindDataArray($dataSystem.variables);
+                $dataSystem.variables.forEach(function (_, index) {
+                    tField(
+                        $dataSystem.variables,
+                        index
+                    );
+                });
+                /*
                 $dataSystem.variables.forEach((variable, i) => {
                     if (variable) {
                         $dataSystem.variables[i] = TranslationManager.translate(variable);
                     }
                 });
+                */
             }
             if ($dataSystem.switches) {
+                TranslationManager.bindDataArray($dataSystem.switches);
+                $dataSystem.switches.forEach(function (_, index) {
+                    tField(
+                        $dataSystem.switches,
+                        index
+                    );
+                });
+                /*
                 $dataSystem.switches.forEach((sw, i) => {
                     if (sw) {
                         $dataSystem.switches[i] = TranslationManager.translate(sw);
                     }
                 }
                 );
+                */
             }
 
             // Translate game title
@@ -1210,6 +1228,34 @@
         Game_Map._jtTraceEventPatched = true;
     }
 
+    //DynamicVariables.js
+    //1.2.0
+    //MV
+    function patch_DynamicVariables() {
+        if (typeof Game_Variables.prototype.getOriginalValue !== 'function' ||
+            typeof Game_Variables.prototype.getDynamicValue !== 'function' ||
+            typeof Game_Switches.prototype.getOriginalValue !== 'function' ||
+            typeof Game_Switches.prototype.getDynamicValue !== 'function'
+        ) return;
+        if (Game_Variables._jtDynamicVariablesPatched) return;
+
+        const _getDynamic = Game_Variables.prototype.getDynamicValue;
+        const _SGetDynamic = Game_Switches.prototype.getDynamicValue;
+        Game_Variables.prototype.getDynamicValue = function (dynamicScript, id, value) {
+            const originalScript = TranslationManager.getRawData($dataSystem.variables, id);
+            const translatedScript = TranslationManager.getTranslatedData($dataSystem.variables, id);
+            if (dynamicScript === translatedScript) dynamicScript = originalScript;
+            return _getDynamic.call(this, dynamicScript, id, value);
+        };
+        Game_Switches.prototype.getDynamicValue = function (dynamicScript, id, value) {
+            const originalScript = TranslationManager.getRawData($dataSystem.switches, id);
+            const translatedScript = TranslationManager.getTranslatedData($dataSystem.switches, id);
+            if (dynamicScript === translatedScript) dynamicScript = originalScript;
+            return _SGetDynamic.call(this, dynamicScript, id, value);
+        };
+        Game_Variables._jtDynamicVariablesPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1241,6 +1287,7 @@
         patch_MakeScreenCapture();
         patch_MessageWindowPopup();
         patch_TraceEvent();
+        patch_DynamicVariables();
     };
     //#endregion
 
