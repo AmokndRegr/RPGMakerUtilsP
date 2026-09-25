@@ -1442,6 +1442,24 @@
         Game_Variables._jtDynamicVariablesPatched = true;
     }
 
+    //DynamicActorGraphic.js
+    //1.2.3
+    //MV
+    function patch_DynamicActorGraphic() {
+        if (typeof Game_Actor.prototype.refreshCustomGraphic !== 'function' ||
+            Game_Actor._jtDynamicActorGraphicPatched
+        ) return;
+
+        const _refresh = Game_Actor.prototype.refreshCustomGraphic;
+        Game_Actor.prototype.refreshCustomGraphic = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _refresh.call(this);
+            })
+        }
+
+        Game_Actor._jtDynamicActorGraphicPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1477,6 +1495,7 @@
         patch_MessageWindowPopup();
         patch_TraceEvent();
         patch_DynamicVariables();
+        patch_DynamicActorGraphic();
     };
     //#endregion
 
