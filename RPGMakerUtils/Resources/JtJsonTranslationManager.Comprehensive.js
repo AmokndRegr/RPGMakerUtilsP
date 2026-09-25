@@ -248,6 +248,9 @@
                 field.databaseRaw = options.databaseRaw;
                 field.databaseTranslated = options.databaseTranslated;
             }
+            if (options.nullSentinel) {
+                field.nullSentinel = true;
+            }
             return field;
         }
 
@@ -266,7 +269,12 @@
 
             compareWithDatabaseRaw: !!options.compareWithDatabaseRaw,
             databaseRaw: options.databaseRaw,
-            databaseTranslated: options.databaseTranslated
+            databaseTranslated: options.databaseTranslated,
+
+            //DynamicDatabase-style shadow field
+            //raw===null ie. not modified, return original property()
+            //return modified value otherwise
+            nullSentinel: !!options.nullSentinel
         };
 
         fields.set(key, field);
@@ -276,6 +284,8 @@
             enumerable: descriptor.enumerable,
 
             get: function () {
+                if (field.nullSentinel && field.raw === null) return null;
+
                 if (field.compareWithDatabaseRaw &&
                     field.raw !== field.databaseRaw
                 ) return field.raw;
@@ -287,6 +297,20 @@
 
             set: function (value) {
                 if (TranslationManager.isJsonExEncoding()) return;
+
+                if (field.nullSentinel) {
+                    if (value === null) {
+                        field.raw = null;
+                        field.translated = null;
+                        //DynamicDatabase __property initialize
+                    }
+                    else {
+                        field.raw = value;
+                        field.translated = value;
+                        //runtime modification wont go through translate
+                    }
+                    return;
+                }
 
                 if (field.compareWithDatabaseRaw) {
                     if (TranslationManager.isRawData() &&
@@ -335,8 +359,14 @@
         const field = this.bindDataField(target, property, options);
 
         if (field) {
-            field.raw = rawValue;
-            field.translated = translatedValue;
+            if (options && options.nullSentinel && rawValue === null) {
+                field.raw = null;
+                field.translated = null;
+            }
+            else {
+                field.raw = rawValue;
+                field.translated = translatedValue;
+            }
 
             if (options && options.compareWithDatabaseRaw) {
                 field.compareWithDatabaseRaw = true;
@@ -402,20 +432,22 @@
         sourceFields.forEach(function (field, property) {
             if (!Object.prototype.hasOwnProperty.call(target, property)) return;
 
-            const options = field.compareWithDatabaseRaw
-                ? {
-                    compareWithDatabaseRaw: true,
-                    databaseRaw: field.databaseRaw,
-                    databaseTranslated: field.databaseTranslated
-                }
-                : undefined;
+            const options = {};
+            if (field.compareWithDatabaseRaw) {
+                options.compareWithDatabaseRaw = true;
+                options.databaseRaw = field.databaseRaw;
+                options.databaseTranslated = field.databaseTranslated;
+            }
+            if (field.nullSentinel) {
+                options.nullSentinel = true;
+            }
 
             TranslationManager.setDataField(
                 target,
                 property,
                 field.raw,
                 field.translated,
-                options
+                Object.keys(options).length > 0 ? options : undefined
             );
         });
     }
@@ -661,8 +693,10 @@
                 if (!actor) return;
                 //if (actor.name) actor.name = TranslationManager.translate(actor.name);
                 if (actor.name) tField(actor, "name");
-                if (actor.profile) actor.profile = TranslationManager.translate(actor.profile);
-                if (actor.nickname) actor.nickname = TranslationManager.translate(actor.nickname);
+                //if (actor.profile) actor.profile = TranslationManager.translate(actor.profile);
+                if (actor.profile) tField(actor, "profile");
+                //if (actor.nickname) actor.nickname = TranslationManager.translate(actor.nickname);
+                if (actor.nickname) tField(actor, "nickname");
                 //if (actor.note) actor.note = TranslationManager.translate(actor.note, times = 1);
             });
         }
@@ -688,7 +722,8 @@
         if ($dataEnemies) {
             $dataEnemies.forEach(enemy => {
                 if (!enemy) return;
-                if (enemy.name) enemy.name = TranslationManager.translate(enemy.name);
+                //if (enemy.name) enemy.name = TranslationManager.translate(enemy.name);
+                if (enemy.name) tField(enemy, "name");
                 //if (enemy.note) enemy.note = TranslationManager.translate(enemy.note, times = 1);
             });
         }
@@ -928,6 +963,145 @@
         }
 
         Game_Actor._jtNameFieldPatched = true;
+    }
+
+    function hasDynamicDatabaseActorField(property) {
+        const descriptor = Object.getOwnPropertyDescriptor(Game_Actor.prototype, property);
+        return !!(
+            descriptor &&
+            typeof descriptor.get === 'function' &&
+            typeof descriptor.set === 'function' &&
+            !Object.prototype.hasOwnProperty.call(descriptor, "value")
+        );
+    }
+
+    function isDynamicDatabaseActor() {
+        return hasDynamicDatabaseActorField('_name') &&
+            hasDynamicDatabaseActorField('_nickname') &&
+            hasDynamicDatabaseActorField('_profile');
+    }
+
+    function patch_DynamicDatabase_ActorFields() {
+        if (!isDynamicDatabaseActor() || Game_Actor._jtDDActorFieldsPatched) return;
+
+        const shadowFields = [
+            { shadow: '__name', accessor: '_name' },
+            { shadow: '__nickname', accessor: '_nickname' },
+            { shadow: '__profile', accessor: '_profile' }
+        ];
+
+        const bindShadowFields = function (actor) {
+            shadowFields.forEach(function (entry) {
+                if (!hasDynamicDatabaseActorField(entry.accessor)) return;
+                TranslationManager.bindDataField(
+                    actor,
+                    entry.shadow,
+                    { nullSentinel: true }
+                );
+            });
+        };
+
+        const _Game_Actor_setup = Game_Actor.prototype.setup;
+        Game_Actor.prototype.setup = function (actorId) {
+            _Game_Actor_setup.call(this, actorId);
+            bindShadowFields(this);
+        };
+
+        const _DataManager_extractSaveContents = DataManager.extractSaveContents;
+        DataManager.extractSaveContents = function (contents) {
+            _DataManager_extractSaveContents.call(this, contents);
+
+            if (!$gameActors || !$gameActors._data) return;
+
+            $gameActors._data.forEach(function (actor) {
+                if (!actor) return;
+                shadowFields.forEach(function (entry) {
+                    if (!hasDynamicDatabaseActorField(entry.accessor)) return;
+
+                    var saved = actor[entry.shadow];
+                    if (saved === undefined) saved = null;
+                    TranslationManager.setDataField(
+                        actor,
+                        entry.shadow,
+                        saved,
+                        saved,
+                        { nullSentinel: true }
+                    );
+                });
+            });
+        };
+
+        const _DataManager_saveGame = DataManager.saveGame;
+        DataManager.saveGame = function (savefileId) {
+            return TranslationManager.fetchRawData(() => {
+                return _DataManager_saveGame.call(this, savefileId);
+            });
+        };
+
+        Game_Actor._jtDDActorFieldsPatched = true;
+    }
+
+    function patch_DynamicDatabase_StringFields() {
+        if (typeof DynamicDatabaseManager === 'undefined' ||
+            typeof DynamicDatabaseManager._makePropertyString !== 'function' ||
+            DynamicDatabaseManager._jtStringPropertyPatched
+        ) return;
+
+        const manager = DynamicDatabaseManager;
+        const _makePropertyString = manager._makePropertyString;
+
+        const convertEscapeCharacters = function (text) {
+            if (typeof manager._convertEscapeCharacters === 'function') {
+                return manager._convertEscapeCharacters(text);
+            }
+
+            if (typeof PluginManagerEx !== 'undefined' &&
+                typeof PluginManagerEx.convertEscapeCharacters === 'function'
+            ) {
+                return PluginManagerEx.convertEscapeCharacters(text);
+            }
+
+            return text;
+        };
+
+        manager._makePropertyString = function (parent, key, child) {
+            const fields = TranslationManager._dataFieldStates.get(parent);
+            const field = fields && fields.get(String(key));
+
+            //vanilla DD function for non JtJson dataField object
+            if (!field) {
+                return _makePropertyString.call(this, parent, key, child);
+            }
+
+            Object.defineProperty(parent, key, {
+                get: function () {
+                    const template = TranslationManager.isRawData()
+                        ? field.raw
+                        : field.translated;
+
+                    return convertEscapeCharacters(
+                        typeof template === 'string' ? template : child
+                    );
+                }
+            });
+        };
+
+        manager._jtStringPropertyPatched = true;
+    }
+
+    //DynamicDatabase.js
+    //1.3.5
+    //MV
+    //maybe also 2.1.4 MZ
+    function patch_DynamicDatabaseComplex() {
+        patch_DynamicDatabase_StringFields();
+
+        if (isDynamicDatabaseActor()) {
+            patch_DynamicDatabase_ActorFields();
+        }
+        else {
+            patch_GameActorNameFields();
+        }
     }
 
     //SceneGlossary.js 
@@ -1474,7 +1648,7 @@
         }
         patch_JsonExStringify();
         patch_JsonExMakeDeepCopy();
-        patch_GameActorNameFields();
+        patch_DynamicDatabaseComplex();
         patch_SceneGlossary();
         patch_TRP_CORE();
         patch_OrignalMessage();
