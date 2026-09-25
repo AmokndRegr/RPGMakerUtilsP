@@ -72,6 +72,8 @@
     >
     */
 
+    TranslationManager._jsonExEncodingDepth = 0;
+
     TranslationManager.isInitialized = function () {
         return this._dict !== null;
     };
@@ -222,8 +224,14 @@
         return this._rawDataDepth > 0;
     }
 
-    TranslationManager.bindDataField = function (target, property) {
+    TranslationManager.isJsonExEncoding = function () {
+        return this._jsonExEncodingDepth > 0;
+    }
+
+    TranslationManager.bindDataField = function (target, property, options) {
         if (!target) return null;
+
+        options = options || {};
 
         const key = String(property);
         let fields = this._dataFieldStates.get(target);
@@ -233,9 +241,15 @@
             this._dataFieldStates.set(target, fields);
         };
 
-        if (fields.has(key)) {
-            return fields.get(key);
-        };
+        var field = fields.get(key);
+        if (field) {
+            if (options.compareWithDatabaseRaw) {
+                field.compareWithDatabaseRaw = true;
+                field.databaseRaw = options.databaseRaw;
+                field.databaseTranslated = options.databaseTranslated;
+            }
+            return field;
+        }
 
         const descriptor = Object.getOwnPropertyDescriptor(target, key);
 
@@ -246,9 +260,13 @@
             return null;
         }
 
-        const field = {
+        field = {
             raw: descriptor.value,
-            translated: descriptor.value
+            translated: descriptor.value,
+
+            compareWithDatabaseRaw: !!options.compareWithDatabaseRaw,
+            databaseRaw: options.databaseRaw,
+            databaseTranslated: options.databaseTranslated
         };
 
         fields.set(key, field);
@@ -258,12 +276,33 @@
             enumerable: descriptor.enumerable,
 
             get: function () {
+                if (field.compareWithDatabaseRaw &&
+                    field.raw !== field.databaseRaw
+                ) return field.raw;
+
                 return TranslationManager.isRawData()
                     ? field.raw
                     : field.translated;
             },
 
             set: function (value) {
+                if (TranslationManager.isJsonExEncoding()) return;
+
+                if (field.compareWithDatabaseRaw) {
+                    if (TranslationManager.isRawData() &&
+                        value === field.raw) {
+                        return;
+                    }//for the JsonEx._encode in saving process
+                    if (value === field.databaseRaw) {
+                        field.raw = field.databaseRaw;
+                        field.translated = field.databaseTranslated;
+                    }//say, initializing vanilla values when loading
+                    else {
+                        field.raw = value;
+                        field.translated = value;
+                    }
+                    return;
+                }
                 if (TranslationManager.isRawData()) {
                     field.raw = value;
                     field.translated = TranslationManager.translate(value);
@@ -291,13 +330,19 @@
     };
 
     TranslationManager.setDataField = function (
-        target, property, rawValue, translatedValue
+        target, property, rawValue, translatedValue, options
     ) {
-        const field = this.bindDataField(target, property);
+        const field = this.bindDataField(target, property, options);
 
         if (field) {
             field.raw = rawValue;
             field.translated = translatedValue;
+
+            if (options && options.compareWithDatabaseRaw) {
+                field.compareWithDatabaseRaw = true;
+                field.databaseRaw = options.databaseRaw;
+                field.databaseTranslated = options.databaseTranslated;
+            }
         }
         else {
             target[property] = translatedValue;
@@ -348,6 +393,32 @@
             TranslationManager.bindDataField(object, key);
         });
     };
+
+    TranslationManager.copyBoundFields = function (source, target) {
+        if (!source || !target) return;
+
+        const sourceFields = TranslationManager._dataFieldStates.get(source);
+        if (!sourceFields) return;
+        sourceFields.forEach(function (field, property) {
+            if (!Object.prototype.hasOwnProperty.call(target, property)) return;
+
+            const options = field.compareWithDatabaseRaw
+                ? {
+                    compareWithDatabaseRaw: true,
+                    databaseRaw: field.databaseRaw,
+                    databaseTranslated: field.databaseTranslated
+                }
+                : undefined;
+
+            TranslationManager.setDataField(
+                target,
+                property,
+                field.raw,
+                field.translated,
+                options
+            );
+        });
+    }
 
     TranslationManager.translate = function (text, detectStartWhitespace = true, times = Number.POSITIVE_INFINITY, cache = true) {
         if (typeof text !== 'string' || !this._dict || this._translatedSet.has(text)) {
@@ -744,6 +815,121 @@
     //#endregion
 
     //#region plugin patches
+    function patch_JsonExStringify() {
+        if (typeof JsonEx.stringify !== 'function' ||
+            JsonEx._jtStringifyPatched
+        ) return;
+
+        const _JsonEx_stringify = JsonEx.stringify;
+        JsonEx.stringify = function (object) {
+            TranslationManager._jsonExEncodingDepth++;
+            try {
+                return _JsonEx_stringify.call(this, object);
+            }
+            finally {
+                TranslationManager._jsonExEncodingDepth--;
+            }
+        }
+        JsonEx._jtStringifyPatched = true;
+    }
+
+    function patch_JsonExMakeDeepCopy() {
+        if (typeof JsonEx.makeDeepCopy !== 'function' ||
+            JsonEx._jtMakeDeepCopyPatched
+        ) return;
+
+        const _JsonEx_makeDeepCopy = JsonEx.makeDeepCopy;
+        JsonEx.makeDeepCopy = function (object) {
+            const copy = _JsonEx_makeDeepCopy.call(this, object);
+
+            TranslationManager.copyBoundFields(object, copy);
+
+            return copy;
+        };
+
+        JsonEx._jtMakeDeepCopyPatched = true;
+    }
+
+    function patch_GameActorNameFields() {
+        if (Game_Actor._jtNameFieldPatched) return;
+
+        const _Game_Actor_setup = Game_Actor.prototype.setup;
+        Game_Actor.prototype.setup = function (actorId) {
+            _Game_Actor_setup.call(this, actorId);
+
+            var actorData = $dataActors[actorId];
+            if (!actorData) return;
+
+            var rawName = TranslationManager.getRawData(actorData, "name");
+            var translatedName = TranslationManager.getTranslatedData(actorData, "name");
+
+            TranslationManager.setDataField(
+                this,
+                "_name",
+                rawName,
+                translatedName,
+                {
+                    compareWithDatabaseRaw: true,
+                    databaseRaw: rawName,
+                    databaseTranslated: translatedName
+                }
+            )
+        }
+
+        const _DataManager_extractSaveContents = DataManager.extractSaveContents;
+        DataManager.extractSaveContents = function (contents) {
+            _DataManager_extractSaveContents.call(this, contents);
+
+            if (!$gameActors || !$gameActors._data || !$dataActors) return;
+
+            const actors = $gameActors && $gameActors._data;
+            if (actors) {
+                actors.forEach(function (actor) {
+                    if (actor) {
+                        var actorData = $dataActors[actor.actorId()];
+                        var savedName = actor._name;
+                        var databaseRaw = TranslationManager.getRawData(actorData, "name");
+                        var databaseTranslated = TranslationManager.getTranslatedData(actorData, "name");
+                        if (savedName === databaseRaw) {
+                            TranslationManager.setDataField(
+                                actor,
+                                "_name",
+                                databaseRaw,
+                                databaseTranslated,
+                                {
+                                    compareWithDatabaseRaw: true,
+                                    databaseRaw: databaseRaw,
+                                    databaseTranslated: databaseTranslated
+                                }
+                            );
+                        } else {
+                            TranslationManager.setDataField(
+                                actor,
+                                "_name",
+                                savedName,
+                                savedName,
+                                {
+                                    compareWithDatabaseRaw: true,
+                                    databaseRaw: databaseRaw,
+                                    databaseTranslated: databaseTranslated
+                                }
+                            );
+                        }
+                    }
+                })
+            }
+        }
+
+        const _DataManager_saveGame = DataManager.saveGame;
+        DataManager.saveGame = function (savefileId) {
+            return TranslationManager.fetchRawData(() => {
+                return _DataManager_saveGame.call(this, savefileId);
+            });
+        }
+
+        Game_Actor._jtNameFieldPatched = true;
+    }
+
     //SceneGlossary.js 
     //2.15.0 
     //MV
@@ -1268,6 +1454,9 @@
                 return TranslationManager.translate(text);
             };
         }
+        patch_JsonExStringify();
+        patch_JsonExMakeDeepCopy();
+        patch_GameActorNameFields();
         patch_SceneGlossary();
         patch_TRP_CORE();
         patch_OrignalMessage();
