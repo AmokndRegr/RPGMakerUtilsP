@@ -1725,6 +1725,35 @@
         Game_Interpreter._jtFileDownloaderPatched = true;
     }
 
+    //StatusBustImage.js
+    //1.9.0
+    //MV
+    function patch_StatusBustImage() {
+        if (typeof Window_Base.prototype.refreshBust === 'function' &&
+            !Window_Base._jtStatusBustImangePatched
+        ) {
+            const _refreshBust = Window_Base.prototype.refreshBust;
+            Window_Base.prototype.refreshBust = function () {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _refreshBust.call(this);
+                });
+            };
+            Window_Base._jtStatusBustImangePatched = true;
+        }
+
+        if (typeof Game_Interpreter.prototype.pluginCommandBustStatus === 'function' &&
+            !Game_Interpreter._jtStatusBustImangePatched
+        ) {
+            const _pluginCommandBustStatus = Game_Interpreter.prototype.pluginCommandBustStatus;
+            Game_Interpreter.prototype.pluginCommandBustStatus = function (command, args) {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _pluginCommandBustStatus.call(this, command, args);
+                });
+            };
+            Game_Interpreter._jtStatusBustImangePatched = true;
+        }
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1764,6 +1793,7 @@
         patch_DynamicDatabaseNote();
         patch_MoviePicture();
         patch_FileDownloader();
+        patch_StatusBustImage();
     };
     //#endregion
 
