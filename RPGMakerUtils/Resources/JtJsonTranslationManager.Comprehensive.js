@@ -1783,6 +1783,41 @@
         Scene_Battle._jtBattleActorFacePatched = true;
     }
 
+    //BattleEffectPopup.js
+    //1.12.2
+    //MV
+    function patch_BattleEffectPopup() {
+        if (typeof Game_Interpreter.prototype.pluginCommandBattleEffectPopup !== 'function' ||
+            Game_Interpreter._jtBattleEffectPopupPatched
+        ) return;
+
+        const params = PluginManager.parameters('BattleEffectPopup') || {};
+        const raw = (params['UsingPicture'] || params['画像使用'] || '').toUpperCase();
+        const usingPicture = raw === 'ON' || raw === 'TRUE';
+
+        //non picture mode
+        if (!usingPicture) {
+            Game_Interpreter._jtBattleEffectPopupPatched = true;
+            return;
+        }
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments)
+                    });
+                });
+            };
+        };
+
+        Game_Interpreter.prototype.pluginCommandBattleEffectPopup = wrap(Game_Interpreter.prototype.pluginCommandBattleEffectPopup);
+        Window_BattleLog.prototype.displayAddedStates = wrap(Window_BattleLog.prototype.displayAddedStates);
+        Window_BattleLog.prototype.displayChangedBuffs = wrap(Window_BattleLog.prototype.displayChangedBuffs);
+
+        Game_Interpreter._jtBattleEffectPopupPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1824,6 +1859,7 @@
         patch_FileDownloader();
         patch_StatusBustImage();
         patch_BattleActorFaceVisibility();
+        patch_BattleEffectPopup();
     };
     //#endregion
 
