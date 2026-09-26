@@ -1634,6 +1634,35 @@
         Game_Actor._jtDynamicActorGraphicPatched = true;
     }
 
+    //DynamicDatabaseNote.js
+    //1.0.0
+    //MV
+    function patch_DynamicDatabaseNote() {
+        if (typeof Game_Interpreter.prototype.changeDataNote !== 'function' ||
+            Game_Interpreter._jtDynamicDatabaseNotePatched
+        ) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const ddnParams = PluginManager.parameters('DynamicDatabaseNote') || {};
+        const prefix = ddnParams.commandPrefix;
+        const ddnCommands = new Set([
+            prefix + 'メモ欄変更',
+            prefix + 'CHANGE_NOTE'
+        ]);
+
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (ddnCommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommand.call(this, command, args);
+                });
+            }
+            _pluginCommand.call(this, command, args);
+        }
+
+        Game_Interpreter._jtDynamicDatabaseNotePatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1670,6 +1699,7 @@
         patch_TraceEvent();
         patch_DynamicVariables();
         patch_DynamicActorGraphic();
+        patch_DynamicDatabaseNote();
     };
     //#endregion
 
