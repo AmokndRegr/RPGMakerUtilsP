@@ -1754,6 +1754,35 @@
         }
     }
 
+    //BattleActorFaceVisibility.js
+    //1.6.0
+    //MV
+    function patch_BattleActorFaceVisibility() {
+        if (typeof Scene_Battle.prototype.createFaceWindow !== 'function' ||
+            Scene_Battle._jtBattleActorFacePatched
+        ) return;
+
+        const _createFaceWindow = Scene_Battle.prototype.createFaceWindow;
+        Scene_Battle.prototype.createFaceWindow = function () {
+            _createFaceWindow.call(this);
+
+            const faceWindow = this._faceWindow;
+            if (!faceWindow || !faceWindow.constructor) return;
+
+            const faceProto = faceWindow.constructor.prototype;
+            if (typeof faceProto.drawActorFace !== 'function' || faceProto._jtPatched) return;
+
+            const _drawActorFace = faceProto.drawActorFace;
+            faceProto.drawActorFace = function (actor) {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _drawActorFace.call(this, actor);
+                });
+            };
+            faceProto._jtPatched = true;
+        };
+        Scene_Battle._jtBattleActorFacePatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1794,6 +1823,7 @@
         patch_MoviePicture();
         patch_FileDownloader();
         patch_StatusBustImage();
+        patch_BattleActorFaceVisibility();
     };
     //#endregion
 
