@@ -1663,6 +1663,49 @@
         Game_Interpreter._jtDynamicDatabaseNotePatched = true;
     }
 
+    //MoviePicture.js
+    //1.8.0
+    //MV
+    function patch_MoviePicture() {
+        if (typeof Game_Interpreter.prototype.execSetVideoPicture !== 'function' ||
+            Game_Interpreter._jtMoviePicturePatched
+        ) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const MPCommands = new Set([
+            "MP_SET_MOVIE",
+            "MP_動画設定",
+            "MP_SET_LOOP",
+            "MP_ループ設定",
+            "MP_SET_SPEED",
+            "MP_速度設定",
+            "MP_SET_PAUSE",
+            "MP_ポーズ設定",
+            "MP_SET_WAIT",
+            "MP_ウェイト設定",
+            "MP_SET_LIMIT",
+            "MP_リミット設定",
+            "MP_SET_VOLUME",
+            "MP_音量設定",
+            "MP_SET_VOLUME_TYPE",
+            "MP_音量種別設定",
+            "MP_SET_OUTER_MOVIE",
+            "MP_外部動画設定",
+        ]);
+
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (MPCommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommand.call(this, command, args);
+                });
+            }
+            _pluginCommand.call(this, command, args);
+        };
+
+        Game_Interpreter._jtMoviePicturePatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1700,6 +1743,7 @@
         patch_DynamicVariables();
         patch_DynamicActorGraphic();
         patch_DynamicDatabaseNote();
+        patch_MoviePicture();
     };
     //#endregion
 
