@@ -1706,6 +1706,25 @@
         Game_Interpreter._jtMoviePicturePatched = true;
     }
 
+    //FileDownloader.js
+    //1.1.0
+    //MV
+    //havent seen any use case yet
+    function patch_FileDownloader() {
+        if (typeof Game_Interpreter.prototype.pluginCommandFileDownloader !== 'function' ||
+            Game_Interpreter._jtFileDownloaderPatched
+        ) return;
+
+        const _pluginCommandDownloader = Game_Interpreter.prototype.pluginCommandFileDownloader;
+        Game_Interpreter.prototype.pluginCommandFileDownloader = function (command, args) {
+            return TranslationManager.disablePluginTrans(() => {
+                _pluginCommandDownloader.call(this, command, args);
+            });
+        };
+
+        Game_Interpreter._jtFileDownloaderPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1744,6 +1763,7 @@
         patch_DynamicActorGraphic();
         patch_DynamicDatabaseNote();
         patch_MoviePicture();
+        patch_FileDownloader();
     };
     //#endregion
 
