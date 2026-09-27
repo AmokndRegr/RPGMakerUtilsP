@@ -1859,6 +1859,34 @@
         Game_Interpreter._jtPictureCallCommonPatched = true;
     }
 
+    // BattleBalloon.js
+    // 1.0.0
+    // MV
+    function patch_BattleBalloon() {
+        if (typeof Game_Interpreter.prototype.updateWaitModeForBattleBalloon !== 'function' ||
+            Game_Interpreter._jtBattleBalloonPatched
+        ) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const BBCommands = new Set([
+            'BB_アクターにバルーン', 'BB_BALLOON_FOR_ACTOR',
+            'BB_敵キャラにバルーン', 'BB_BALLOON_FOR_ENEMY',
+            'BB_使用者にバルーン', 'BB_BALLOON_FOR_USER'
+        ]);
+
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (BBCommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommand.call(this, command, args);
+                })
+            }
+            _pluginCommand.call(this, command, args);
+        }
+
+        Game_Interpreter._jtBattleBalloonPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1902,6 +1930,7 @@
         patch_BattleActorFaceVisibility();
         patch_BattleEffectPopup();
         patch_PictureCallCommon();
+        patch_BattleBalloon();
     };
     //#endregion
 
