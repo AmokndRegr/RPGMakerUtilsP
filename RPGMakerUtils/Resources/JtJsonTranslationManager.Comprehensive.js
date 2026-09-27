@@ -1969,6 +1969,36 @@
         Game_Interpreter._jtScreenRotationPatched = true;
     }
 
+    //ItemCallScript.js
+    //1.0.0
+    //MV
+    //idk what these scripts r like
+    function patch_ItemCallScript() {
+        if (typeof Game_Action.prototype.getItemScript !== 'function' ||
+            typeof Game_Action.prototype.applyItemScript !== 'function' ||
+            Game_Action._jtItemCallScriptPatched
+        ) return;
+
+        const _getItemScript = Game_Action.prototype.getItemScript;
+        const _applyItemScript = Game_Action.prototype.applyItemScript;
+        Game_Action.prototype.getItemScript = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _getItemScript.call(this);
+                });
+            });
+        }
+        Game_Action.prototype.applyItemScript = function (target) {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _applyItemScript.call(this, target);
+                });
+            });
+        }
+
+        Game_Action._jtItemCallScriptPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2016,6 +2046,7 @@
         patch_ParallelParty();
         patch_SceneNumberInput();
         patch_ScreenRotation();
+        patch_ItemCallScript();
     };
     //#endregion
 
