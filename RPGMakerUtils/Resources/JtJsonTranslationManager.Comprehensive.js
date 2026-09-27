@@ -1818,6 +1818,47 @@
         Game_Interpreter._jtBattleEffectPopupPatched = true;
     }
 
+    //PictureCallCommon.js
+    //1.14.6
+    //MV
+    function patch_PictureCallCommon() {
+        if (typeof Game_Screen.prototype.setPictureCallCommon !== 'function' ||
+            Game_Interpreter._jtPictureCallCommonPatched
+        ) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const PictureCallCommonCommands = new Set([
+            'P_CALL_CE',
+            'P_CALL_SWITCH',
+            'P_CALL_KEY_BIND',
+            'P_CALL_CE_REMOVE',
+            'P_STROKE',
+            'P_STROKE_REMOVE',
+            'P_POINTER',
+            'P_POINTER_REMOVE',
+            'ピクチャのボタン化',
+            'ピクチャのスイッチ化',
+            'ピクチャのキーバインド',
+            'ピクチャのボタン化解除',
+            'ピクチャのなでなで設定',
+            'ピクチャのなでなで解除',
+            'ピクチャのポインタ化',
+            'ピクチャのポインタ化解除'
+        ]);
+
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (PictureCallCommonCommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommand.call(this, command, args);
+                });
+            }
+            _pluginCommand.call(this, command, args);
+        };
+
+        Game_Interpreter._jtPictureCallCommonPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1860,6 +1901,7 @@
         patch_StatusBustImage();
         patch_BattleActorFaceVisibility();
         patch_BattleEffectPopup();
+        patch_PictureCallCommon();
     };
     //#endregion
 
