@@ -1887,6 +1887,88 @@
         Game_Interpreter._jtBattleBalloonPatched = true;
     }
 
+    // ParallelParty.js
+    // 1.3.1
+    // MV
+    function patch_ParallelParty() {
+        if (typeof Game_Interpreter.prototype.execChangeParty !== 'function' ||
+            Game_Interpreter._jtParallelPartyPatched
+        ) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const PPCommands = new Set([
+            'PP_パーティ変更', 'PP_CHANGE_PARTY'
+        ]);
+
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (PPCommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommand.call(this, command, args);
+                })
+            }
+            _pluginCommand.call(this, command, args);
+        }
+
+        Game_Interpreter._jtParallelPartyPatched = true;
+    }
+
+    //SceneNumberInput.js
+    //1.2.1
+    //MV
+    function patch_SceneNumberInput() {
+        if (typeof Game_Interpreter.prototype.callNumberInput !== 'function' ||
+            Game_Interpreter._jtSceneNumberInputPatched
+        ) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const SNICommands = new Set([
+            'SNI_CALL_NUMBER_INPUT', 'SNI_数値入力画面の呼び出し',
+            'SNI_SET_NUMBER_INPUT_HELP', 'SNI_ヘルプ説明設定'
+        ]);
+
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (SNICommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommand.call(this, command, args);
+                })
+            }
+            _pluginCommand.call(this, command, args);
+        }
+
+        Game_Interpreter._jtSceneNumberInputPatched = true;
+    }
+
+    //ScreenRotation.js
+    //1.0.0
+    //MV
+    function patch_ScreenRotation() {
+        if (typeof Game_Interpreter.prototype.execStartRotation !== 'function' ||
+            Game_Interpreter._jtScreenRotationPatched
+        ) return;
+
+        const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+        const SRCommands = new Set([
+            'SR_回転開始', 'SR_START_ROTATION',
+            'SR_回転停止', 'SR_STOP_ROTATION',
+            'SR_回転リセット', 'SR_RESET_ROTATION',
+            'SR_ズーム開始', 'SR_START_ZOOM'
+        ]);
+
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (SRCommands.has(String(command).toUpperCase())) {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommand.call(this, command, args);
+                })
+            }
+            _pluginCommand.call(this, command, args);
+        }
+
+        Game_Interpreter._jtScreenRotationPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -1931,6 +2013,9 @@
         patch_BattleEffectPopup();
         patch_PictureCallCommon();
         patch_BattleBalloon();
+        patch_ParallelParty();
+        patch_SceneNumberInput();
+        patch_ScreenRotation();
     };
     //#endregion
 
