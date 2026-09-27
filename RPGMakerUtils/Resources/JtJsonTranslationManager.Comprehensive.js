@@ -1999,6 +1999,309 @@
         Game_Action._jtItemCallScriptPatched = true;
     }
 
+    //AdditionalDescription.js
+    //2.1.1
+    //MV
+    //possible script execution
+    function patch_AdditionalDescription() {
+        if (typeof Window_Help.prototype.setAnotherScript !== 'function' ||
+            Window_Help._jtAdditionalDescriptionPatched
+        ) return;
+
+        const _setAnotherScript = Window_Help.prototype.setAnotherScript;
+        Window_Help.prototype.setAnotherScript = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    _setAnotherScript.call(this);
+                });
+            });
+        }
+        Window_Help._jtAdditionalDescriptionPatched = true;
+    }
+
+    //EffectConditions.js
+    //1.0.3
+    //MV
+    //possible script execution
+    function patch_EffectConditions() {
+        if (typeof Game_Action.prototype.isValidEffect !== 'function' ||
+            Game_Action._jtEffectConditionsPatched
+        ) return;
+
+        const _isValidEffect = Game_Action.prototype.isValidEffect;
+        Game_Action.prototype.isValidEffect = function (target, effect) {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _isValidEffect.call(this, target, effect);
+                });
+            });
+        }
+
+        Game_Action._jtEffectConditionsPatched = true;
+    }
+
+    //EventItemCondition.js
+    //1.2.0
+    //MV
+    function patch_EventItemCondition() {
+        if (typeof Window_EventItem.prototype.isOkEventItem !== 'function' ||
+            Window_EventItem._jtEventItemConditionPatched
+        ) return;
+
+        const _isOkEventItem = Window_EventItem.prototype.isOkEventItem;
+        Window_EventItem.prototype.isOkEventItem = function (item) {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _isOkEventItem.call(this, item);
+                });
+            });
+        }
+
+        Window_EventItem._jtEventItemConditionPatched = true;
+    }
+
+    //CursedAction.js
+    //1.0.2
+    //MV
+    function patch_CursedAction() {
+        if (typeof Game_Battler.prototype.getCursedSkillIdIfExist !== 'function' ||
+            Game_Battler._jtCursedActionPatched
+        ) return;
+
+        const _getCursedSkillIdIfExist = Game_Battler.prototype.getCursedSkillIdIfExist;
+        Game_Battler.prototype.getCursedSkillIdIfExist = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _getCursedSkillIdIfExist.call(this);
+                });
+            });
+        }
+
+        Game_Battler._jtCursedActionPatched = true;
+    }
+
+    //CounterExtend.js
+    //1.10.1
+    //MV
+    function patch_CounterExtend() {
+        if (typeof Game_BattlerBase.prototype.executeCounterScript !== 'function' ||
+            typeof Game_BattlerBase.prototype.getCounterCustomRate !== 'function' ||
+            Game_BattlerBase._jtCounterExtendPatched
+        ) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        }
+
+        const proto = Game_BattlerBase.prototype;
+        [
+            'getCounterCustomRate',
+            'executeCounterScript',
+            'reserveCounterSkillId',
+            'getMagicCounterRate',
+            'getCounterAnimationId',
+            'getCrossCounterCondition',
+            'eraseStateCounterFailure',
+            'getCounterRate'
+        ].forEach(function (name) {
+            if (typeof proto[name] === 'function') {
+                proto[name] = wrap(proto[name]);
+            }
+        });
+
+        Game_BattlerBase._jtCounterExtendPatched = true;
+    }
+
+    //DynamicEquipParam.js
+    //1.0.2
+    //MV
+    function patch_DynamicEquipParam() {
+        if (typeof Game_Actor.prototype.paramPlusDynamic !== 'function' ||
+            typeof Game_Actor.prototype.special !== 'function' ||
+            Game_Actor._jtDynamicEquipParamPatched
+        ) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        }
+
+        Game_Actor.prototype.paramPlusDynamic = wrap(Game_Actor.prototype.paramPlusDynamic);
+        Game_Actor.prototype.special = wrap(Game_Actor.prototype.special);
+
+        Game_Actor._jtDynamicEquipParamPatched = true;
+    }
+
+    //SubstituteExtend.js
+    //1.4.2
+    //MV
+    function patch_SubstituteExtend() {
+        if (typeof Game_BattlerBase.prototype.isSubstituteExtend !== 'function' ||
+            typeof Game_BattlerBase.prototype.getSubstituteMetaInfo !== 'function' ||
+            Game_BattlerBase._jtSubstituteExtendPatched
+        ) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        }
+
+        Game_BattlerBase.prototype.isSubstituteExtend = wrap(Game_BattlerBase.prototype.isSubstituteExtend);
+        Game_BattlerBase.prototype.getSubstituteMetaInfo = wrap(Game_BattlerBase.prototype.getSubstituteMetaInfo);
+
+        Game_BattlerBase._jtSubstituteExtendPatched = true;
+    }
+
+    //SealActorCommand.js
+    //1.4.0
+    //MV
+    function patch_SealActorCommand() {
+        if (typeof Game_Actor.prototype.isSealCommand !== 'function' ||
+            Game_Actor._jtSealActorCommandPatched
+        ) return;
+
+        const _isSealCommand = Game_Actor.prototype.isSealCommand;
+        Game_Actor.prototype.isSealCommand = function (commandNames) {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _isSealCommand.call(this, commandNames);
+                })
+            })
+        }
+
+        Game_Actor._jtSealActorCommandPatched = true;
+    }
+
+    //VariableControlItem.js
+    //1.2.0
+    //MV
+    function patch_VariableControlItem() {
+        if (typeof Game_Action.prototype.applyVariableControl !== 'function' ||
+            typeof Game_Action.prototype.isVariableControlSubject !== 'function' ||
+            Game_Action._jtVariableControlItemPatched
+        ) return;
+
+        const _applyVariableControl = Game_Action.prototype.applyVariableControl;
+        Game_Action.prototype.applyVariableControl = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _applyVariableControl.call(this);
+                });
+            });
+        };
+        Game_Action._jtVariableControlItemPatched = true;
+    }
+
+    // WaitInterpreterCondition.js
+    // 1.0.0
+    // MV
+    function patch_WaitInterpreterCondition() {
+        if (typeof Game_Interpreter.prototype.execWaitSwitch !== 'function' ||
+            typeof Game_Interpreter.prototype.isValidWaitScript !== 'function' ||
+            Game_Interpreter._jtWaitInterpreterConditionPatched
+        ) return;
+
+        const _execWaitSwitch = Game_Interpreter.prototype.execWaitSwitch;
+        const _isValidWaitScript = Game_Interpreter.prototype.isValidWaitScript;
+        Game_Interpreter.prototype.execWaitSwitch = function (args) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _execWaitSwitch.call(this, args);
+            });
+        }
+        Game_Interpreter.prototype.isValidWaitScript = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _isValidWaitScript.call(this);
+                });
+            });
+        }
+        Game_Interpreter._jtWaitInterpreterConditionPatched = true;
+    }
+
+    //HitAndEvasionExtend.js
+    //1.1.2
+    //MV
+    function patch_HitAndEvasionExtend() {
+        if (Game_Action._jtHitAndEvasionExtendPatched) return;
+
+        const params = PluginManager.parameters('HitAndEvasionExtend') || {};
+        const hasFormula = ['formulaPhysicalHit', 'formulaMagicalHit', 'formulaPhysicalEvasion', 'formulaMagicalEvasion'].some(function (key) { return params[key]; });
+
+        if (!hasFormula) {
+            Game_Action._jtHitAndEvasionExtendPatched = true;
+            return;
+        }
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        }
+
+        Game_Action.prototype.itemHit = wrap(Game_Action.prototype.itemHit);
+        Game_Action.prototype.itemEva = wrap(Game_Action.prototype.itemEva);
+
+        Game_Action._jtHitAndEvasionExtendPatched = true;
+    }
+
+    //SaveFileLoadOnly.js
+    //1.0.0
+    //MV
+    function patch_SaveFileLoadOnly() {
+        if (typeof Window_SavefileList.prototype.isLoadOnly !== 'function' ||
+            Window_SavefileList._jtSaveFileLoadOnlyPatched
+        ) return;
+
+        const _isLoadOnly = Window_SavefileList.prototype.isLoadOnly;
+        Window_SavefileList.prototype.isLoadOnly = function (fileId) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _isLoadOnly.call(this, fileId);
+            });
+        }
+
+        Window_SavefileList._jtSaveFileLoadOnlyPatched = true;
+    }
+
+    // ShakeOnDamage.js
+    // 1.2.0
+    // MV
+    function patch_ShakeOnDamage() {
+        if (typeof Game_Battler.prototype.convertShakeParameter !== 'function' ||
+            Game_Battler._jtShakeOnDamagePatched
+        ) return;
+
+        const _convertShakeParameter = Game_Battler.prototype.convertShakeParameter;
+        Game_Battler.prototype.convertShakeParameter = function (param) {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _convertShakeParameter.call(this, param);
+                })
+            })
+        }
+
+        Game_Battler._jtShakeOnDamagePatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2047,6 +2350,19 @@
         patch_SceneNumberInput();
         patch_ScreenRotation();
         patch_ItemCallScript();
+        patch_AdditionalDescription();
+        patch_EffectConditions();
+        patch_EventItemCondition();
+        patch_CursedAction();
+        patch_CounterExtend();
+        patch_DynamicEquipParam();
+        patch_SubstituteExtend();
+        patch_SealActorCommand();
+        patch_VariableControlItem();
+        patch_WaitInterpreterCondition();
+        patch_HitAndEvasionExtend();
+        patch_SaveFileLoadOnly();
+        patch_ShakeOnDamage();
     };
     //#endregion
 
