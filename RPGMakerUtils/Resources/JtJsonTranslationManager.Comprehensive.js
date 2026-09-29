@@ -2356,19 +2356,107 @@
     //1.0.2
     //MV
     //Assumption that it wont operate on DynamicDatabase hooked object?
-    function patch_StateMessageRemoveTarget(){
-        if(typeof Game_Battler.prototype.hiddenNameOnlyTargetProcess!=='function') return;
-        if(Game_Battler._jtStateMessageRemoveTargetPatched) return;
+    function patch_StateMessageRemoveTarget() {
+        if (typeof Game_Battler.prototype.hiddenNameOnlyTargetProcess !== 'function') return;
+        if (Game_Battler._jtStateMessageRemoveTargetPatched) return;
 
         const _hideName = Game_Battler.prototype.hiddenNameOnlyTargetProcess;
-        Game_Battler.prototype.hiddenNameOnlyTargetProcess=function(process){
-            return TranslationManager.fetchRawData(()=>{
-                return TranslationManager.disablePluginTrans(()=>{
-                    return _hideName.call(this,process);
+        Game_Battler.prototype.hiddenNameOnlyTargetProcess = function (process) {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _hideName.call(this, process);
                 });
             });
         };
-        Game_Battler._jtStateMessageRemoveTargetPatched=true;
+        Game_Battler._jtStateMessageRemoveTargetPatched = true;
+    }
+
+    //AutomaticState.js
+    //1.4.4
+    //MV
+    function patch_AutomaticState() {
+        if (typeof Game_BattlerBase.prototype.isAutomaticValid !== 'function') return;
+        if (typeof Game_Actor.prototype.isAutomaticValid !== 'function') return;
+        if (Game_BattlerBase._jtAutomaticStatePatched) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        }
+        Game_BattlerBase.prototype.isAutomaticValid = wrap(Game_BattlerBase.prototype.isAutomaticValid);
+        Game_Actor.prototype.isAutomaticValid = wrap(Game_Actor.prototype.isAutomaticValid);
+        Game_BattlerBase._jtAutomaticStatePatched = true;
+    }
+
+    //CustomizeCritical.js
+    //1.1.4
+    //MV
+    function patch_CustomizeCritical() {
+        if (typeof Game_Action.prototype.judgeCritical !== 'function' ||
+            typeof Window_BattleLog.prototype.showCriticalEffect !== 'function'
+        ) return;
+        if (Game_Action._jtCustomizeCriticalPatched) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        }
+        Game_Action.prototype.evalDamageFormula = wrap(Game_Action.prototype.evalDamageFormula);
+        Game_Action.prototype.judgeCritical = wrap(Game_Action.prototype.judgeCritical);
+        Window_BattleLog.prototype.startAction = wrap(Window_BattleLog.prototype.startAction);
+        Window_BattleLog.prototype.showCriticalEffect = wrap(Window_BattleLog.prototype.showCriticalEffect);
+        Game_Action._jtCustomizeCriticalPatched = true;
+    }
+
+    //DrainExtend.js
+    //1.2.0
+    //MV
+    function patch_DrainExtend() {
+        if (typeof Game_BattlerBase.prototype.getDrainEffectiveRate !== 'function' ||
+            typeof Game_Action.prototype.getDrainRate !== 'function'
+        ) return;
+        if (Game_BattlerBase._jtDrainExtendPatched) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        };
+        Game_BattlerBase.prototype.getDrainEffectiveRate = wrap(Game_BattlerBase.prototype.getDrainEffectiveRate);
+        Game_Action.prototype.getDrainRate = wrap(Game_Action.prototype.getDrainRate);
+        Game_BattlerBase._jtDrainExtendPatched = true;
+    }
+
+    //EquipConditionExtend.js
+    //1.1.0
+    //MV
+    function patch_EquipConditionExtend() {
+        if (typeof Game_BattlerBase.prototype.canEquipExtend !== 'function') return;
+        if (Game_BattlerBase._jtEquipConditionExtendPatched) return;
+
+        const _canEE = Game_BattlerBase.prototype.canEquipExtend;
+        Game_BattlerBase.prototype.canEquipExtend = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _canEE.apply(this, arguments);
+                })
+            })
+        }
+        Game_BattlerBase._jtEquipConditionExtendPatched = true;
     }
 
     //#endregion
@@ -2434,6 +2522,10 @@
         patch_ShakeOnDamage();
         patch_EroStatusFix();
         patch_StateMessageRemoveTarget();
+        patch_AutomaticState();
+        patch_CustomizeCritical();
+        patch_DrainExtend();
+        patch_EquipConditionExtend();
     };
     //#endregion
 
