@@ -2510,6 +2510,65 @@
         proto._jtGraphicalDesignModePatched = true;
     }
 
+    //KillBonus.js
+    //1.4.0
+    //MV
+    function patch_KillBonus() {
+        if (typeof Game_Action.prototype.executeKillBonus !== 'function' ||
+            Game_Action._jtKillBonusPatched
+        ) return;
+
+        const _executeKB = Game_Action.prototype.executeKillBonus;
+        Game_Action.prototype.executeKillBonus = function (target) {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _executeKB.call(this, target);
+                })
+            })
+        };
+        Game_Action._jtKillBonusPatched = true;
+    }
+
+    //MessageSkip.js
+    //1.17.1
+    //MV
+    function patch_MessageSkip() {
+        if (typeof Window_Message.prototype.initializeMessageAutoCount !== 'function' ||
+            Window_Message._jtMessageSkipPatched
+        ) return;
+
+        const _initializeMAC = Window_Message.prototype.initializeMessageAutoCount;
+        Window_Message.prototype.initializeMessageAutoCount = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _initializeMAC.apply(this, arguments);
+                })
+            })
+        };
+        Window_Message._jtMessageSkipPatched = true;
+    }
+
+    //ScopeExtend.js
+    //1.6.1
+    //MV
+    function patch_ScopeExtend() {
+        if (typeof Game_Action.prototype.isScopeExtendInfo !== 'function' ||
+            typeof Game_Action.prototype.getScopeExtendInfo !== 'function'
+        ) return;
+        if (Game_Action._jtScopeExtendPatched) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.disablePluginTrans(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        Game_Action.prototype.repeatTargets = wrap(Game_Action.prototype.repeatTargets);
+        Game_Action.prototype.numTargets = wrap(Game_Action.prototype.numTargets);
+        Game_Action._jtScopeExtendPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2579,6 +2638,9 @@
         patch_EquipConditionExtend();
         patch_GeneralRecord();
         patch_GraphicalDesignMode();
+        patch_KillBonus();
+        patch_MessageSkip();
+        patch_ScopeExtend();
     };
     //#endregion
 
