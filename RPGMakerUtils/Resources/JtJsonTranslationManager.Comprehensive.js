@@ -2476,6 +2476,40 @@
         Game_Interpreter._jtGeneralRecordPatched = true;
     }
 
+    //GraphicalDesignMode.js
+    //2.10.11
+    //MV
+    function patch_GraphicalDesignMode() {
+        var proto = Window_Base.prototype;
+        if (typeof proto.processSetProperty !== 'function' ||
+            proto._jtGraphicalDesignModePatched
+        ) return;
+
+        const _CEC = proto.convertEscapeCharacters;
+        const _proc = proto.processSetProperty;
+        TranslationManager._jtGDMToken = false;
+        proto.convertEscapeCharacters = function (text) {
+            if (TranslationManager._jtGDMToken) {
+                TranslationManager._jtGDMToken = false;
+
+                return TranslationManager.disablePluginTrans(() => {
+                    return _CEC.call(this, text);
+                });
+            }
+
+            return _CEC.call(this, text);
+        };
+        proto.processSetProperty = function () {
+            TranslationManager._jtGDMToken = true;
+            try {
+                return _proc.apply(this, arguments);
+            } finally {
+                TranslationManager._jtGDMToken = false;
+            }
+        };
+        proto._jtGraphicalDesignModePatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2544,6 +2578,7 @@
         patch_DrainExtend();
         patch_EquipConditionExtend();
         patch_GeneralRecord();
+        patch_GraphicalDesignMode();
     };
     //#endregion
 
