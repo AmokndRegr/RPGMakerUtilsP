@@ -2459,6 +2459,23 @@
         Game_BattlerBase._jtEquipConditionExtendPatched = true;
     }
 
+    //GeneralRecord.js
+    //1.0.0
+    //MV
+    //missing CEC, just in case
+    function patch_GeneralRecord() {
+        if (typeof Game_Interpreter.prototype.pluginCommandGeneralRecord !== 'function') return;
+        if (Game_Interpreter._jtGeneralRecordPatched) return;
+
+        const _pluginCGR = Game_Interpreter.prototype.pluginCommandGeneralRecord;
+        Game_Interpreter.prototype.pluginCommandGeneralRecord = function (command, args) {
+            return TranslationManager.disablePluginTrans(() => {
+                return _pluginCGR.call(this, command, args);
+            });
+        };
+        Game_Interpreter._jtGeneralRecordPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2526,6 +2543,7 @@
         patch_CustomizeCritical();
         patch_DrainExtend();
         patch_EquipConditionExtend();
+        patch_GeneralRecord();
     };
     //#endregion
 
