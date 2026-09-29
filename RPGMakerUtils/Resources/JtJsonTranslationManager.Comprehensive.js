@@ -2352,6 +2352,25 @@
         sceneProto._jtEroStatusFixPatched = true;
     }
 
+    //StateMessageRemoveTarget.js
+    //1.0.2
+    //MV
+    //Assumption that it wont operate on DynamicDatabase hooked object?
+    function patch_StateMessageRemoveTarget(){
+        if(typeof Game_Battler.prototype.hiddenNameOnlyTargetProcess!=='function') return;
+        if(Game_Battler._jtStateMessageRemoveTargetPatched) return;
+
+        const _hideName = Game_Battler.prototype.hiddenNameOnlyTargetProcess;
+        Game_Battler.prototype.hiddenNameOnlyTargetProcess=function(process){
+            return TranslationManager.fetchRawData(()=>{
+                return TranslationManager.disablePluginTrans(()=>{
+                    return _hideName.call(this,process);
+                });
+            });
+        };
+        Game_Battler._jtStateMessageRemoveTargetPatched=true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2414,6 +2433,7 @@
         patch_SaveFileLoadOnly();
         patch_ShakeOnDamage();
         patch_EroStatusFix();
+        patch_StateMessageRemoveTarget();
     };
     //#endregion
 
