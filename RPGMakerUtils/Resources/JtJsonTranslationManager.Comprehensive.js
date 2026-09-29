@@ -2302,6 +2302,56 @@
         Game_Battler._jtShakeOnDamagePatched = true;
     }
 
+    //EroStatusFix.js
+    //RJ01618221
+    //MZ
+    //patching all those arina- slop don seem meaningful
+    function patch_EroStatusFix() {
+        if (typeof Scene_CustomMenu === 'undefined') return;
+
+        const sceneProto = Scene_CustomMenu.prototype;
+        const originalCreate = sceneProto._createEroVarTextWindow;
+
+        if (typeof originalCreate !== 'function') return;
+        if (sceneProto._jtEroStatusFixPatched) return;
+
+        const patchWindowPrototype = function (windowObject) {
+            if (!windowObject ||
+                !windowObject.constructor ||
+                !windowObject.constructor.prototype
+            ) return;
+
+            const proto = windowObject.constructor.prototype;
+
+            if (proto._jtEroStatusDrawCategoryPatched) return;
+
+            const originalDrawCategoryText = proto.drawCategoryText;
+
+            if (typeof originalDrawCategoryText !== 'function') return;
+
+            proto.drawCategoryText = function (varId, rect) {
+                return TranslationManager.enableValueTrans(() => {
+                    return originalDrawCategoryText.call(this, varId, rect);
+                });
+            };
+
+            proto._jtEroStatusDrawCategoryPatched = true;
+        };
+
+        sceneProto._createEroVarTextWindow = function () {
+            const result = TranslationManager.enableValueTrans(() => {
+                return originalCreate.call(this);
+            });
+
+            const windowObject = this._eroVarTextWindow;
+
+            patchWindowPrototype(windowObject);
+
+            return result;
+        };
+        sceneProto._jtEroStatusFixPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2363,6 +2413,7 @@
         patch_HitAndEvasionExtend();
         patch_SaveFileLoadOnly();
         patch_ShakeOnDamage();
+        patch_EroStatusFix();
     };
     //#endregion
 
