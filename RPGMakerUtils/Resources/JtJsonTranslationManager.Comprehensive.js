@@ -2589,7 +2589,24 @@
         Game_Battler.prototype.setDirectlyAttack = wrap(Game_Battler.prototype.setDirectlyAttack);
         Game_Actor.prototype.requestCustomMotion = wrap(Game_Actor.prototype.requestCustomMotion);
         Game_Battler._jtDirectlyAttackEffectPatched = true;
+    }
 
+    //CharacterGraphicExtend.js
+    //1.15.0
+    //MV
+    function patch_CharacterGraphicExtend() {
+        if (typeof Game_Event.prototype.getMetaCg !== 'function') return;
+        if (Game_Event._jtCharacterGraphicExtendPatched) return;
+
+        const _getMCG = Game_Event.prototype.getMetaCg;
+        Game_Event.prototype.getMetaCg = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _getMCG.apply(this, arguments);
+                })
+            })
+        };
+        Game_Event._jtCharacterGraphicExtendPatched = true;
     }
 
     //#endregion
@@ -2665,6 +2682,7 @@
         patch_MessageSkip();
         patch_ScopeExtend();
         patch_DirectlyAttackEffect();
+        patch_CharacterGraphicExtend();
     };
     //#endregion
 
