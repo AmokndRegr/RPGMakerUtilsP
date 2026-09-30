@@ -2569,6 +2569,29 @@
         Game_Action._jtScopeExtendPatched = true;
     }
 
+    //DirectlyAttackEffect.js
+    //1.5.0
+    //MV
+    function patch_DirectlyAttackEffect() {
+        if (typeof Game_Battler.prototype.setDirectlyAttack !== 'function' ||
+            typeof Game_Actor.prototype.requestCustomMotion !== 'function'
+        ) return;
+        if (Game_Battler._jtDirectlyAttackEffectPatched) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.disablePluginTrans(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        Game_Actor.prototype.performAction = wrap(Game_Actor.prototype.performAction);
+        Game_Battler.prototype.setDirectlyAttack = wrap(Game_Battler.prototype.setDirectlyAttack);
+        Game_Actor.prototype.requestCustomMotion = wrap(Game_Actor.prototype.requestCustomMotion);
+        Game_Battler._jtDirectlyAttackEffectPatched = true;
+
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2641,6 +2664,7 @@
         patch_KillBonus();
         patch_MessageSkip();
         patch_ScopeExtend();
+        patch_DirectlyAttackEffect();
     };
     //#endregion
 
