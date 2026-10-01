@@ -2807,6 +2807,67 @@
         ImageManager._jtFacePicturePatched = true;
     }
 
+    //TkoolMV_PluginCommandBook.js
+    //1.1.3
+    //MV
+    function patch_TkoolMV_PluginCommandBook() {
+        if (typeof Game_Interpreter.prototype.pluginCommandBook_unescape !== 'function' ||
+            typeof Game_Interpreter.prototype.executePluginCommand !== 'function' ||
+            Game_Interpreter._jtTkoolMV_PluginCommandBookPatched
+        ) return;
+
+        const _executePC = Game_Interpreter.prototype.executePluginCommand;
+        Game_Interpreter.prototype.executePluginCommand = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _executePC.apply(this, arguments);
+                })
+            })
+        }
+
+        const bookParams = PluginManager.parameters('TkoolMV_PluginCommandBook') || {};
+
+        function isEnabled(value) {
+            const text = String(value || '').trim().toLowerCase();
+            return text === 'true' || text === '1' || text === 'yes' || text === 'はい'
+        }
+
+        const scriptEscapeEnabled = isEnabled(bookParams['スクリプトに制御文字適用']);
+
+        //is it necessary to keep cmd355 n cmd111 trans tho
+        //given the usual chain of add->refresh, maybe disable callback is okish?
+        if (scriptEscapeEnabled) {
+            const _cmd355 = Game_Interpreter.prototype.command355;
+            Game_Interpreter.prototype.command355 = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return _cmd355.apply(this, arguments);
+                })
+            }
+
+            const _cmd111 = Game_Interpreter.prototype.command111;
+            Game_Interpreter.prototype.command111 = function () {
+                if (this._params && this._params[0] === 12) {
+                    return TranslationManager.fetchRawData(() => {
+                        return _cmd111.apply(this, arguments);
+                    })
+                }
+                return _cmd111.apply(this, arguments);
+            }
+
+            const _processMC = Game_Character.prototype.processMoveCommand;
+            Game_Character.prototype.processMoveCommand = function (command) {
+                if (command && command.code === Game_Character.ROUTE_SCRIPT) {
+                    return TranslationManager.fetchRawData(() => {
+                        return _processMC.call(this, command);
+                    })
+                }
+                return _processMC.call(this, command);
+            }
+        }
+
+        Game_Interpreter._jtTkoolMV_PluginCommandBookPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2887,6 +2948,7 @@
         patch_CharacterPictureManager();
         patch_FlexibleBattleBgm();
         patch_FacePicture();
+        patch_TkoolMV_PluginCommandBook();
     };
     //#endregion
 
