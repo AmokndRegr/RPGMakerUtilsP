@@ -656,7 +656,8 @@
     TranslationManager.translateDataMap = function () {
         if ($dataMap) {
             if ($dataMap.displayName) {
-                $dataMap.displayName = TranslationManager.translate($dataMap.displayName);
+                TranslationManager.translateDataField($dataMap, 'displayName');
+                //$dataMap.displayName = TranslationManager.translate($dataMap.displayName);
             }
             // if ($dataMap.events) {
             //     $dataMap.events.forEach(event => {
@@ -2696,6 +2697,116 @@
         }
     }
 
+    //MapNameExtend.js
+    //1.3.0
+    //MV
+    function patch_MapNameExtend() {
+        if (typeof Game_Map.prototype.isSameDisplayName !== 'function' ||
+            Game_Map._jtMapNameExtendPatched
+        ) return;
+
+        const _isSDN = Game_Map.prototype.isSameDisplayName;
+        Game_Map.prototype.isSameDisplayName = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _isSDN.apply(this, arguments);
+                })
+            })
+        }
+        Game_Map._jtMapNameExtendPatched = true;
+    }
+
+    //CharacterGraphicManager.js
+    //1.0.0
+    //MV
+    function patch_CharacterGraphicManager() {
+        if (typeof Game_Actor.prototype.updateDynamicCharacterInfo !== 'function' ||
+            Game_Actor._jtCharacterGraphicManagerPatched
+        ) return;
+
+        const _updateDCI = Game_Actor.prototype.updateDynamicCharacterInfo;
+        Game_Actor.prototype.updateDynamicCharacterInfo = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _updateDCI.apply(this, arguments);
+            })
+        }
+        Game_Actor._jtCharacterGraphicManagerPatched = true;
+    }
+
+    //CharacterPictureManager.js
+    //1.0.0
+    //MV
+    function patch_CharacterPictureManager() {
+        if (typeof Game_Interpreter.prototype.pluginCommandCharacterPictureManager !== 'function' ||
+            Game_Interpreter._jtCharacterPictureManagerPatched
+        ) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        };
+
+        Game_Interpreter.prototype.pluginCommandCharacterPictureManager = wrap(Game_Interpreter.prototype.pluginCommandCharacterPictureManager);
+        if (typeof Game_Battler.prototype.getPictureName === 'function') {
+            Game_Battler.prototype.getPictureName = wrap(Game_Battler.prototype.getPictureName);
+        }
+        if (typeof Game_Battler.prototype.getCpX === 'function') {
+            Game_Battler.prototype.getCpX = wrap(Game_Battler.prototype.getCpX);
+        }
+        if (typeof Game_Battler.prototype.getCpY === 'function') {
+            Game_Battler.prototype.getCpY = wrap(Game_Battler.prototype.getCpY);
+        }
+        if (typeof Game_Battler.prototype.getPictureName === 'function') {
+            Game_Battler.prototype.getPictureName = wrap(Game_Battler.prototype.getPictureName);
+        }
+        if (typeof Game_Item.prototype.getMaxEndurance === 'function') {
+            Game_Item.prototype.getMaxEndurance = wrap(Game_Item.prototype.getMaxEndurance);
+        }
+
+        Game_Interpreter._jtCharacterPictureManagerPatched = true;
+    }
+
+    //FlexibleBattleBgm.js
+    //1.0.1
+    //MV
+    function patch_FlexibleBattleBgm() {
+        if (typeof Game_Interpreter.prototype.pluginCommandFlexibleBattleBgm !== 'function' ||
+            Game_Interpreter._jtFlexibleBattleBgmPatched
+        ) return;
+
+        const _pluginCFBB = Game_Interpreter.prototype.pluginCommandFlexibleBattleBgm;
+        Game_Interpreter.prototype.pluginCommandFlexibleBattleBgm = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _pluginCFBB.apply(this, arguments);
+            })
+        }
+        Game_Interpreter._jtFlexibleBattleBgmPatched = true;
+    }
+
+    //FacePicture.js
+    //1.2.1
+    //MV
+    function patch_FacePicture() {
+        if (typeof ImageManager.getPictureFaceInfo !== 'function' ||
+            ImageManager._jtFacePicturePatched
+        ) return;
+
+        const _getPFI = ImageManager.getPictureFaceInfo;
+        ImageManager.getPictureFaceInfo = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _getPFI.apply(this, arguments);
+                })
+            })
+        }
+        ImageManager._jtFacePicturePatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2771,6 +2882,11 @@
         patch_CharacterGraphicExtend();
         patch_SceneCustomMenu();
         patch_EroStatusFix();
+        patch_MapNameExtend();
+        patch_CharacterGraphicManager();
+        patch_CharacterPictureManager();
+        patch_FlexibleBattleBgm();
+        patch_FacePicture();
     };
     //#endregion
 
