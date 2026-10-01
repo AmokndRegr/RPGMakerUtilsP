@@ -2651,6 +2651,51 @@
         Game_Event._jtCharacterGraphicExtendPatched = true;
     }
 
+    //SceneCustomMenu.js
+    //1.27.0
+    //MV
+    //Not quite confident in this
+    function patch_SceneCustomMenu() {
+        if (typeof Scene_CustomMenu === 'undefined' ||
+            typeof Window_CustomMenuCommand === 'undefined' ||
+            typeof Window_CustomMenuDataList === 'undefined'
+        ) return;
+
+        const rawWrap = function (proto, name) {
+            const oriFunc = proto[name];
+            if (typeof oriFunc !== 'function' ||
+                oriFunc._jtSceneCustomMenuPatched
+            ) return;
+
+            const wrapped = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return oriFunc.apply(this, arguments);
+                })
+            }
+            wrapped._jtSceneCustomMenuGotoPatched = true;
+            proto[name] = wrapped;
+        }
+
+        rawWrap(Window_CustomMenuCommand.prototype, 'isScriptValid');
+        rawWrap(Window_CustomMenuDataList.prototype, 'makeCommandList');
+        rawWrap(Window_CustomMenuDataList.prototype, 'isVisible');
+        rawWrap(Window_CustomMenuDataList.prototype, 'isEnabledSub');
+        rawWrap(Window_CustomMenuDataList.prototype, 'drawItemSub');
+        rawWrap(Scene_CustomMenu.prototype, 'fireEvent');
+
+        if (!SceneManager._jtSceneCustomMenuGotoPatched) {
+            const _goto = SceneManager.goto;
+            SceneManager.goto = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _goto.apply(this, arguments);
+                    })
+                })
+            }
+            SceneManager._jtSceneCustomMenuGotoPatched = true;
+        }
+    }
+
     //#endregion
 
     //#region Plugin
@@ -2712,7 +2757,6 @@
         patch_HitAndEvasionExtend();
         patch_SaveFileLoadOnly();
         patch_ShakeOnDamage();
-        patch_EroStatusFix();
         patch_StateMessageRemoveTarget();
         patch_AutomaticState();
         patch_CustomizeCritical();
@@ -2725,6 +2769,8 @@
         patch_ScopeExtend();
         patch_DirectlyAttackEffect();
         patch_CharacterGraphicExtend();
+        patch_SceneCustomMenu();
+        patch_EroStatusFix();
     };
     //#endregion
 
