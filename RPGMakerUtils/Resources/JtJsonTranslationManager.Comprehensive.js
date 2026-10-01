@@ -1105,8 +1105,11 @@
     }
 
     //SceneGlossary.js 
-    //2.15.0 
+    //2.23.2 
     //MV
+    //Regarding param.AutoAddition, too complicated to patch startMessage n gainGlossaryFromText back to vanilla logic.
+    //ASSUME glossary table is used during translation so that its still there after trans.
+    //Also skipping getGlossaryCompleteMessage since 収集率 is usually recognized by mtool.
     function patch_SceneGlossary() {
         if (typeof Window_Glossary === 'undefined') return;
         if (Window_Glossary.prototype._jtPatched) return;
@@ -1115,8 +1118,10 @@
         const _getPictureName = Window_Glossary.prototype.getPictureName;
         if (typeof _getPictureName === "function") {
             Window_Glossary.prototype.getPictureName = function (index) {
-                return TranslationManager.disablePluginTrans(() => {
-                    return _getPictureName.call(this, index);
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _getPictureName.call(this, index);
+                    })
                 })
             }
         }
@@ -1124,8 +1129,45 @@
         const _getPlusPictureData = Window_Glossary.prototype.getPlusPictureData;
         if (typeof _getPlusPictureData === "function") {
             Window_Glossary.prototype.getPlusPictureData = function (imageIndex, index) {
-                return TranslationManager.disablePluginTrans(() => {
-                    return _getPlusPictureData.call(this, imageIndex, index);
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _getPlusPictureData.call(this, imageIndex, index);
+                    })
+                })
+            }
+        }
+
+        const _getED = Window_Glossary.prototype.getEnemyData;
+        if (typeof _getED === 'function') {
+            Window_Glossary.prototype.getEnemyData = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _getED.apply(this, arguments);
+                    })
+                })
+            }
+        }
+
+        const _addEG = Game_Troop.prototype.addEnemyGlossary;
+        if (typeof _addEG === 'function') {
+            Game_Troop.prototype.addEnemyGlossary = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _addEG.apply(this, arguments);
+                    })
+                })
+            }
+        }
+
+        //postpone trans to drawItemText 
+        //text to be displayed shouldnt change much through all those keyword proc
+        const _getDes = Window_Glossary.prototype.getDescription;
+        if (typeof _getDes === 'function') {
+            Window_Glossary.prototype.getDescription = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _getDes.apply(this, arguments);
+                    })
                 })
             }
         }
@@ -2735,30 +2777,23 @@
             return undefined;
         }
 
-        if (!$dataItems || !Array.isArray($dataItems)) return;
-
-        $dataItems.forEach(function (item) {
-            const sourceComb = getSGCategory(item);
-
-            if (sourceComb === undefined || sourceComb === null || sourceComb === '' || registered.has(sourceComb)) return;
-
-            registered.add(sourceComb);
-
-            const translatedComb = TranslationManager._dict[sourceComb];
-
-            if (!translatedComb) return;
-
-            const sourceParts = sourceComb.split(',');
-            const translatedParts = getValueParts(translatedComb, sourceParts.length);
-
-            if (!translatedParts) return;
-
-            sourceParts.forEach(function (sourcePart, index) {
-                const translatedPart = translatedParts[index];
-
-                if (!sourcePart || !translatedPart) return;
-
-                addTrans(sourcePart, translatedPart);
+        const dataArray = [$dataItems, $dataArmors, $dataWeapons];
+        dataArray.forEach(data => {
+            if (!data || !Array.isArray(data)) return;
+            data.forEach(function (item) {
+                const sourceComb = getSGCategory(item);
+                if (sourceComb === undefined || sourceComb === null || sourceComb === '' || registered.has(sourceComb)) return;
+                registered.add(sourceComb);
+                const translatedComb = TranslationManager._dict[sourceComb];
+                if (!translatedComb) return;
+                const sourceParts = sourceComb.split(',');
+                const translatedParts = getValueParts(translatedComb, sourceParts.length);
+                if (!translatedParts) return;
+                sourceParts.forEach(function (sourcePart, index) {
+                    const translatedPart = translatedParts[index];
+                    if (!sourcePart || !translatedPart) return;
+                    addTrans(sourcePart, translatedPart);
+                })
             })
         })
     };
