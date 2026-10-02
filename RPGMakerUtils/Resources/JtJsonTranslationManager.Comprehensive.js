@@ -61,14 +61,37 @@
 
     TranslationManager._rawDataDepth = 0;
     TranslationManager._dataFieldStates = new WeakMap();
+    TranslationManager._descriptionTemplateStates = new WeakMap();
+    TranslationManager._descriptionTemplateTransDepth = 0;
     /*
     WeakMap<
         Object,
         Map<
-            PropertyKey,{
-            raw: any,
-            translated: any
-        }>
+            PropertyKey,
+            {
+            raw: any, 
+            translated: any, 
+            getter: function, 
+
+            //runtime object, eg. $gameActor
+            compareWithDatabaseRaw: boolean,
+            databaseRaw: any,
+            databaseTranslated
+
+            //used by DynamicDatabase __property
+            nullSentinel: boolean
+            }
+
+            //derived field for DescriptionTemplate
+            {
+            readRaw: function,
+            readTranslated: function,
+            getter: function,
+
+            //the upper structure of the object be4 derived field attaching
+            valueField?: valueFieldState 
+            }
+        >
     >
     */
 
@@ -228,6 +251,61 @@
         return this._jsonExEncodingDepth > 0;
     }
 
+    // tell if the property of target is still that one bond by JtJson proc chain
+    TranslationManager.getDataFieldState = function (target, property) {
+        const fields = target && this._dataFieldStates.get(target);
+        const field = fields && fields.get(String(property));
+        const descriptor = target && Object.getOwnPropertyDescriptor(target, property);
+        return field && descriptor && descriptor.get === field.getter ? field : null;
+    }
+
+    //temporily disable rawDataDepth
+    TranslationManager.fetchTranslatedData = function (callback) {
+        const depth = this._rawDataDepth;
+        this._rawDataDepth = 0;
+        try {
+            return callback();
+        }
+        finally {
+            this._rawDataDepth = depth;
+        }
+    };
+
+    //Derived fields keeps the original setter (n its absence), enumerability and lifetime.
+    //valueField is optional, preset only for a JtJson bounded property.
+    //No re-enter override yet.
+    TranslationManager.bindDerivedDataField = function (target, property, readRaw, readTranslated, valueField) {
+        if (!target) return null;
+
+        const descriptor = Object.getOwnPropertyDescriptor(target, property);
+        if (!descriptor || !descriptor.configurable) return null;
+
+        let fields = this._dataFieldStates.get(target);
+        if (!fields) {
+            fields = new Map();
+            this._dataFieldStates.set(target, fields);
+        }
+
+        const field = {
+            readRaw: readRaw,
+            readTranslated: readTranslated,
+            valueField: valueField
+        };
+        field.getter = function () {
+            return TranslationManager.isRawData()
+                ? field.readRaw.call(this)
+                : field.readTranslated.call(this);
+        };
+        Object.defineProperty(target, property, {
+            configurable: descriptor.configurable,
+            enumerable: descriptor.enumerable,
+            get: field.getter,
+            set: descriptor.set
+        });
+        fields.set(String(property), field);
+        return field;
+    };
+
     TranslationManager.bindDataField = function (target, property, options) {
         if (!target) return null;
 
@@ -241,7 +319,7 @@
             this._dataFieldStates.set(target, fields);
         };
 
-        var field = fields.get(key);
+        var field = this.getDataFieldState(target, key);
         if (field) {
             if (options.compareWithDatabaseRaw) {
                 field.compareWithDatabaseRaw = true;
@@ -337,18 +415,23 @@
             }
         });
 
+        field.getter = Object.getOwnPropertyDescriptor(target, key).get;
+
         return field;
     };
 
     TranslationManager.setTranslatedData = function (target, property, value) {
-        const field = this.bindDataField(target, property);
+        const bound = this.bindDataField(target, property);
+        const field = bound && (bound.valueField || bound); //get valueField when available
 
-        if (field) {
+        //bonded dynamic field write
+        if (field && !field.readRaw) {
             field.translated = value;
         }
         else {
             target[property] = value;
         }
+        //non bonded property or derived field w/o valueField
 
         return value;
     };
@@ -356,9 +439,10 @@
     TranslationManager.setDataField = function (
         target, property, rawValue, translatedValue, options
     ) {
-        const field = this.bindDataField(target, property, options);
+        const bound = this.bindDataField(target, property, options);
+        const field = bound && (bound.valueField || bound);
 
-        if (field) {
+        if (field && !field.readRaw) {
             if (options && options.nullSentinel && rawValue === null) {
                 field.raw = null;
                 field.translated = null;
@@ -381,18 +465,19 @@
         return translatedValue;
     };
 
+    //get vanilla value as if JtJson not installed
     TranslationManager.getRawData = function (target, property) {
-        const fields = target && this._dataFieldStates.get(target);
-        const field = fields && fields.get(String(property));
-
-        return field ? field.raw : target && target[property];
+        const field = this.getDataFieldState(target, property);
+        return field && !field.readRaw ? field.raw : this.fetchRawData(function () {
+            return target && target[property];
+        });
     };
 
     TranslationManager.getTranslatedData = function (target, property) {
-        const fields = target && this._dataFieldStates.get(target);
-        const field = fields && fields.get(String(property));
-
-        return field ? field.translated : target && target[property];
+        const field = this.getDataFieldState(target, property);
+        return field && !field.readRaw ? field.translated : this.fetchTranslatedData(function () {
+            return target && target[property];
+        });
     };
 
     TranslationManager.translateDataField = function (target, property) {
@@ -401,6 +486,9 @@
         if (!field) {
             return undefined;
         }
+
+        //derived field don need a second trans seq
+        if (field.readRaw) return this.getTranslatedData(target, property);
 
         field.translated = this.translate(field.raw);
         return field.translated;
@@ -431,6 +519,18 @@
         if (!sourceFields) return;
         sourceFields.forEach(function (field, property) {
             if (!Object.prototype.hasOwnProperty.call(target, property)) return;
+
+            //don handle override property since its mever specified as this line put
+            if (TranslationManager.getDataFieldState(source, property) !== field) return;
+            //vanilla dynamic logic d get lost as well
+            if (field.readRaw) {
+                TranslationManager.setDataField(
+                    target, property,
+                    TranslationManager.getRawData(source, property),
+                    TranslationManager.getTranslatedData(source, property)
+                );
+                return;
+            }
 
             const options = {};
             if (field.compareWithDatabaseRaw) {
@@ -502,6 +602,19 @@
 
             //occupied char record
             const occupied = new Array(textLength).fill(false);
+
+            //DynamicTemplate keys preservation
+            if (this._descriptionTemplateTransDepth > 0) {
+                const placeholders = /\$\{(.*?)}/g;
+                let placeholder;
+                while ((placeholder = placeholders.exec(text))) {
+                    for (let index = placeholder.index; index < placeholders.lastIndex; index++) {
+                        occupied[index] = true;
+                        freeCount--;
+                    }
+                }
+            }
+
             const result_intervals = [];
             // Go through all possible length buckets
             outer: for (let len of lenSorted) {
@@ -673,6 +786,122 @@
         }
     };
 
+    //pass in an object n its description before possible DT bonding
+    //mirroring applyDescriptionTemplate@DescriptionTemplate.js gating
+    //n its description has to be getter
+    function observeDescriptionTemplates(object, previousDescriptions) {
+        if (!previousDescriptions || typeof DataManager.findTemplate !== 'function') return;
+        const templates = DataManager.findTemplate(object);
+        if (!templates) return;
+
+        object.forEach(function (data, index) {
+            if (!data || previousDescriptions[index] || !data.meta || data.meta.NoDescTemplate) return;
+
+            const descriptor = Object.getOwnPropertyDescriptor(data, 'description');
+
+            const templateIndex = parseInt(data.meta.TemplateIndex) - 1;
+            const template = templates[templateIndex || 0];
+            if (!template ||
+                typeof template !== 'string' ||
+                !descriptor ||
+                typeof descriptor.get !== 'function' ||
+                !data.hasOwnProperty('prevDesc')) return;
+
+            TranslationManager._descriptionTemplateStates.set(
+                data,
+                {
+                    template: template,
+                    nativeGetter: descriptor.get
+                }
+            );
+        });
+    }
+
+    //mirroring createDescription@DescriptionTemplate.js
+    function createTranslatedDescription(data, template) {
+
+        const textValue = function (owner, key, convertLabel) {
+            const value = owner[key];
+            let result = value;
+
+            let bound = TranslationManager.getDataFieldState(owner, key);
+
+            if (convertLabel) {
+                const label = DataManager.findOptionLabel(key, value);
+                if (label) {
+                    result = label;
+                    const params = PluginManager.parameters('DescriptionTemplate');
+                    const terms = params.terms || {};
+                    const option = DataManager._optionLabels && DataManager._optionLabels.get(key);
+                    if (value === -1 && key === 'elementId') {
+                        bound = TranslationManager.getDataFieldState(terms, 'normalAttack');
+                    }
+                    else if (option && option[value]) {
+                        bound = TranslationManager.getDataFieldState(option, value);
+                    }
+                    else {
+                        bound = TranslationManager.getDataFieldState(terms, 'none');
+                    }
+                }
+            }
+            return bound || typeof result !== 'string' ? result : TranslationManager.translate(result);
+        };
+
+        const paramProps = ['mhp', 'mmp', 'atk', 'def', 'mat', 'mdf', 'agi', 'luk'];
+
+        TranslationManager._descriptionTemplateTransDepth++;
+        try {
+            template = TranslationManager.translate(template);
+        }
+        finally {
+            TranslationManager._descriptionTemplateTransDepth--;
+        }
+        template = template.replace(/\\n/g, '\n');
+        return template.replace(/\$\{(.*?)}/g, function (_, propName) {
+            if (propName === 'description') {
+                return textValue(data, 'prevDesc', false);
+            }
+            else if (data.meta && data.meta.hasOwnProperty(propName)) {
+                return textValue(data.meta, propName, true);
+            }
+            else if (data.damage && data.damage.hasOwnProperty(propName)) {
+                return textValue(data.damage, propName, true);
+            }
+            else if (data.hasOwnProperty(propName)) {
+                return textValue(data, propName, true);
+            }
+            const paramIndex = paramProps.indexOf(propName);
+            return paramIndex >= 0 ? textValue(data.params, paramIndex, false) : '';
+        });
+    }
+
+    //DescriptionTemplate.js
+    //1.0.0
+    //MV
+    //hard coded
+    function patch_DescriptionTemplate() {
+        [$dataItems, $dataSkills, $dataWeapons, $dataArmors].forEach(function (array) {
+            if (!array) return;
+            array.forEach(function (data) {
+                const state = data && TranslationManager._descriptionTemplateStates.get(data);
+                if (!state) return;
+                const descriptor = Object.getOwnPropertyDescriptor(data, 'description');
+                if (!descriptor || descriptor.get !== state.nativeGetter) return;
+                TranslationManager.bindDerivedDataField(data,
+                    'description',
+                    function () {
+                        return TranslationManager.disablePluginTrans(function () {
+                            return state.nativeGetter.call(data);
+                        });
+                    },
+                    function () {
+                        return createTranslatedDescription(data, state.template);
+                    }
+                );
+            });
+        });
+    }
+
     TranslationManager.translateCommonData = function () {
         const tField = function (object, key) {
             return TranslationManager.translateDataField(object, key);
@@ -711,10 +940,32 @@
                     //if (item.name) item.name = TranslationManager.translate(item.name);
                     if (item.name) tField(item, "name");
                     //if (item.description) item.description = TranslationManager.translate(item.description);
-                    if (item.description) tField(item, "description");
+                    //if (item.description) tField(item, "description");
+                    const description = Object.getOwnPropertyDescriptor(item, 'description');
+                    if (
+                        description &&
+                        Object.prototype.hasOwnProperty.call(description, 'value') &&
+                        typeof description.value === 'string'
+                    )
+                        tField(item, 'description'); //non DT bond field only
                     //if (item.note) item.note = TranslationManager.translate(item.note, times = 1);
-                    if (item.preName) item.preName = item.name;
-                    if (item.preDescription) item.preDescription = item.description; // for ItemNameEscape.js
+                    //if (item.preName) item.preName = item.name;
+                    if (item.preName) {
+                        TranslationManager.setDataField(
+                            item,
+                            'preName',
+                            TranslationManager.getRawData(item, 'preName'),
+                            item.name);
+                    }
+                    //if (item.preDescription) item.preDescription = item.description; // for ItemNameEscape.js
+                    if (item.preDescription && !TranslationManager._descriptionTemplateStates.has(item)) {
+                        TranslationManager.setDataField(
+                            item,
+                            'preDescription',
+                            TranslationManager.getRawData(item, 'preDescription'),
+                            item.description);
+                    }
+                    //ItemNameEscape.js don seem compatible w/ DescriptionTemplate in preDrescription
                 });
             }
         });
@@ -1050,6 +1301,7 @@
 
         const manager = DynamicDatabaseManager;
         const _makePropertyString = manager._makePropertyString;
+        const _makeProperty = manager._makeProperty;
 
         const convertEscapeCharacters = function (text) {
             if (typeof manager._convertEscapeCharacters === 'function') {
@@ -1065,27 +1317,73 @@
             return text;
         };
 
-        manager._makePropertyString = function (parent, key, child) {
+        manager._makePropertyString = function (parent, key, child, sourceChild) {
+            /*
             const fields = TranslationManager._dataFieldStates.get(parent);
             const field = fields && fields.get(String(key));
+            */
+            //now it uses derived field
+            const field = TranslationManager.getDataFieldState(parent, key);
 
             //vanilla DD function for non JtJson dataField object
             if (!field) {
                 return _makePropertyString.call(this, parent, key, child);
             }
 
-            Object.defineProperty(parent, key, {
-                get: function () {
-                    const template = TranslationManager.isRawData()
-                        ? field.raw
-                        : field.translated;
+            //when DT installed?
+            //snapshot of child when DD initialize
+            if (field.readRaw) {
+                const rawChild = arguments.length > 3 ? sourceChild : TranslationManager.getRawData(parent, key);
+                const translatedChild = child;
+                _makePropertyString.call(this, parent, key, child);
+                return TranslationManager.bindDerivedDataField(
+                    parent,
+                    key,
+                    function () {
+                        return TranslationManager.disablePluginTrans(function () {
+                            return convertEscapeCharacters(rawChild);
+                        })
+                    },
+                    function () {
+                        return convertEscapeCharacters(translatedChild);
+                    }
+                );
+            }
 
-                    return convertEscapeCharacters(
-                        typeof template === 'string' ? template : child
-                    );
-                }
-            });
+            _makePropertyString.call(this, parent, key, child);
+            Object.defineProperty(parent, key, { set: undefined });
+
+            return TranslationManager.bindDerivedDataField(
+                parent,
+                key,
+                function () {
+                    return TranslationManager.disablePluginTrans(function () {
+                        return convertEscapeCharacters(typeof field.raw === 'string' ? field.raw : child);
+                    })
+                },
+                function () {
+                    return convertEscapeCharacters(typeof field.translated === 'string' ? field.translated : child);
+                },
+                field
+            );
         };
+
+        if (typeof _makeProperty === 'function') {
+            manager._makeProperty = function (parent, keyPath, key, child) {
+                const field = TranslationManager.getDataFieldState(parent, key);
+                if (field) {
+                    const rawChild = TranslationManager.getRawData(parent, key);
+                    if (typeof rawChild === 'string' && /\\/.test(rawChild)) {
+                        return this._makePropertyString(parent, key, child, rawChild);
+                    }
+                    if (typeof rawChild === 'string') {
+                        return _makeProperty.call(this, parent, keyPath, key, rawChild);
+                    }
+                }
+
+                return _makeProperty.apply(this, arguments);
+            };
+        }
 
         manager._jtStringPropertyPatched = true;
     }
@@ -1103,6 +1401,34 @@
         else {
             patch_GameActorNameFields();
         }
+    }
+
+    //ItemNameEscape.js
+    //1.0.2
+    //MV
+    function patch_ItemNameEscape() {
+        if (typeof DataManager.convertName !== 'function' ||
+            typeof DataManager.databaseEscape !== 'function' ||
+            DataManager._jtItemNameEscapePatched
+        ) return;
+        const _convertName = DataManager.convertName;
+        DataManager.convertName = function (data) {
+            const name = TranslationManager.getDataFieldState(data, 'name');
+            const description = TranslationManager.getDataFieldState(data, 'description');
+            //not in raw value context n name/description is bonded by JtJson
+            if (!TranslationManager.isRawData() && (name || description)) {
+                //update raw field
+                const manager = this;
+                TranslationManager.fetchRawData(function () {
+                    return TranslationManager.disablePluginTrans(function () {
+                        return _convertName.call(manager, data);
+                    });
+                });
+            }
+            //update translated field
+            return _convertName.apply(this, arguments);
+        };
+        DataManager._jtItemNameEscapePatched = true;
     }
 
     //SceneGlossary.js 
@@ -2883,6 +3209,7 @@
         patch_JsonExStringify();
         patch_JsonExMakeDeepCopy();
         patch_DynamicDatabaseComplex();
+        patch_ItemNameEscape();
         patch_SceneGlossary();
         patch_TRP_CORE();
         patch_OrignalMessage();
@@ -3027,7 +3354,37 @@
     // This function is aliased to load our custom data before the game starts.
     const _DataManager_loadDatabase = DataManager.loadDatabase;
     DataManager.loadDatabase = function () {
-        _DataManager_loadDatabase.call(this);
+        DataManager._translationApplied = false;
+        TranslationManager._descriptionTemplateStates = new WeakMap();
+        if (!DataManager._jtDatabaseOnLoadWrapped) {
+            const _onLoad = DataManager.onLoad;
+            DataManager.onLoad = function (object) {
+                const databaseObject = this._databaseFiles.some(function (file) {
+                    return window[file.name] === object;
+                });
+                let previousDescriptions = null;
+                if (
+                    databaseObject &&
+                    Array.isArray(object) &&
+                    typeof this.findTemplate === 'function' &&
+                    typeof this.findOptionLabel === 'function'
+                ) {
+                    previousDescriptions = object.map(function (data) {
+                        return !!(data && data.hasOwnProperty('prevDesc'));
+                    });
+                }
+                const result = databaseObject ?
+                    TranslationManager.fetchRawData(() => {
+                        return TranslationManager.disablePluginTrans(() => {
+                            return _onLoad.apply(this, arguments);
+                        });
+                    }) : _onLoad.apply(this, arguments);
+                observeDescriptionTemplates(object, previousDescriptions);
+                return result;
+            };
+            DataManager._jtDatabaseOnLoadWrapped = true;
+        }
+
         // Get plugin parameters
         let parameters = PluginManager.parameters('JtJsonTranslationManager');
         let translationPath = parameters['translationPath'] || 'translations.json';
@@ -3045,6 +3402,7 @@
             throw new Error('Failed to load ' + url);
         };
         xhr.send();
+        _DataManager_loadDatabase.apply(this, arguments);
     };
 
     // Patch DataManager.onLoad to run translation after all database files are loaded
@@ -3052,12 +3410,15 @@
     DataManager._translationApplied = false;
     DataManager.onLoad = function (object) {
         _DataManager_onLoad.call(this, object);
+        /*
         if (DataManager.isDatabaseLoaded() && !DataManager._translationApplied && TranslationManager.isInitialized()) {
             registerSGCategoryTrans();
             TranslationManager.translateCommonData();
             patchPlugin();
             DataManager._translationApplied = true;
         }
+        */
+        //this injection can be inconsistent when DT loaded
 
         // Translate map data when it's loaded
         if (object === $dataMap && TranslationManager.isInitialized()) {
@@ -3066,6 +3427,20 @@
 
         // TranslationManager.saveDictionary();
     };
+
+    //new injection point
+    const _Scene_Boot_isReady = Scene_Boot.prototype.isReady;
+    Scene_Boot.prototype.isReady = function () {
+        const ready = _Scene_Boot_isReady.apply(this, arguments);
+        if (ready && !DataManager._translationApplied && TranslationManager.isInitialized()) {
+            patch_DescriptionTemplate();
+            registerSGCategoryTrans();
+            TranslationManager.translateCommonData();
+            patchPlugin();
+            DataManager._translationApplied = true;
+        }
+        return ready;
+    }
 
     window.TranslationManager = TranslationManager;
     //#endregion
@@ -3153,7 +3528,11 @@
     const _Game_Variables_value = Game_Variables.prototype.value;
     Game_Variables.prototype.value = function (variableId) {
         const value = _Game_Variables_value.call(this, variableId);
-        if (TranslationManager._CECDepth > 0 && typeof value === 'string') { return TranslationManager.translate(value); };
+        if (!TranslationManager.isRawData() &&
+            TranslationManager._CECDepth > 0 &&
+            typeof value === 'string') {
+            return TranslationManager.translate(value);
+        };
         return value;
     };
 
