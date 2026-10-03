@@ -27,8 +27,6 @@
  *   TranslationManager.getTranslatePromise(text)       // Promise-based translation
  *   TranslationManager.translateIfNeed(text, callback) // Callback style
  *
- * Place this plugin below any plugins that add new menu commands or text.
- *
  * @param translationPath
  * @text Translation JSON Path
  * @desc Path to the translations.json file (relative to www folder). Example: 'data/translations.json'
@@ -3194,6 +3192,50 @@
         Game_Interpreter._jtTkoolMV_PluginCommandBookPatched = true;
     }
 
+    //EventReSpawn.js
+    //1.12.5
+    //MV
+    function patch_EventReSpawn() {
+        const interpreter = Game_Interpreter.prototype;
+        const map = Game_Map.prototype;
+
+        if (typeof interpreter.getEventIdForEventReSpawn !== 'function' ||
+            typeof map.appendSpawnMap !== 'function' ||
+            interpreter._jtEventReSpawnPatched
+        ) return;
+
+        const ers_commands = new Set([
+            'ERS_MAKE', 'ERS_生成',
+            'ERS_MAKE_RANDOM', 'ERS_ランダム生成',
+            'ERS_MAKE_TEMPLATE', 'ERS_テンプレート生成',
+            'ERS_MAKE_TEMPLATE_RANDOM', 'ERS_テンプレートランダム生成',
+            'ERS_GET_LAST_SPAWN_EVENT_ID', 'ERS_最終生成イベントID取得',
+            'ERS_TRY_COUNT'
+        ]);
+
+        const pluginC = interpreter.pluginCommand;
+        interpreter.pluginCommand = function (command, args) {
+            if (typeof command !== 'string' ||
+                !ers_commands.has(command.toUpperCase())
+            ) {
+                return pluginC.apply(this, arguments);
+            }
+
+            return TranslationManager.fetchRawData(() => {
+                return pluginC.apply(this, arguments);
+            });
+        };
+
+        const _appendSM = map.appendSpawnMap;
+        map.appendSpawnMap = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _appendSM.apply(this, arguments);
+            });
+        }
+
+        interpreter._jtEventReSpawnPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -3276,6 +3318,7 @@
         patch_FlexibleBattleBgm();
         patch_FacePicture();
         patch_TkoolMV_PluginCommandBook();
+        patch_EventReSpawn();
     };
     //#endregion
 
