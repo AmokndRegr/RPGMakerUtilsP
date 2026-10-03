@@ -3236,6 +3236,70 @@
         interpreter._jtEventReSpawnPatched = true;
     }
 
+    //RetryBattle.js
+    //1.4.0
+    //MV
+    function patch_RetryBattle() {
+        if (typeof DataManager.saveGameForRetry !== 'function' ||
+            DataManager._jtRetryBattlePatched
+        ) return;
+
+        const _saveGFR = DataManager.saveGameForRetry;
+        DataManager.saveGameForRetry = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _saveGFR.apply(this, arguments);
+            });
+        }
+
+        DataManager._jtRetryBattlePatched = true;
+    }
+
+    //NobleMushroom.js
+    //1.12.1
+    //MV
+    function patch_NobleMushroom() {
+        if (typeof Game_Interpreter.prototype.pluginCommandBlueMushroom !== 'function' ||
+            typeof Game_Message.prototype.popupNameInputPrompt !== 'function' ||
+            typeof DataManager.saveGameAuto !== 'function' ||
+            Game_Interpreter._jtNobleMushroomPatched
+        ) return;
+
+        const bmCommands = new Set([
+            'タイプ変更', 'CHANGE_TYPE',
+            'ノベルウィンドウ位置設定', 'SET_RECT_NOVEL_WINDOW',
+            'ノベルコマンド位置設定', 'SET_RECT_NOVEL_COMMAND'
+        ])
+
+        const _pluginCBM = Game_Interpreter.prototype.pluginCommandBlueMushroom;
+        Game_Interpreter.prototype.pluginCommandBlueMushroom = function (command, args) {
+            if (typeof command !== 'string' ||
+                !bmCommands.has(command.toUpperCase())) {
+                return _pluginCBM.apply(this, arguments);
+            }
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _pluginCBM.apply(this, arguments);
+                })
+            })
+        }
+
+        const _popupNIP = Game_Message.prototype.popupNameInputPrompt;
+        Game_Message.prototype.popupNameInputPrompt = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _popupNIP.apply(this, arguments);
+            })
+        }
+
+        const _saveGA = DataManager.saveGameAuto;
+        DataManager.saveGameAuto = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _saveGA.apply(this, arguments);
+            })
+        }
+
+        Game_Interpreter._jtNobleMushroomPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -3319,6 +3383,8 @@
         patch_FacePicture();
         patch_TkoolMV_PluginCommandBook();
         patch_EventReSpawn();
+        patch_RetryBattle();
+        patch_NobleMushroom();
     };
     //#endregion
 
