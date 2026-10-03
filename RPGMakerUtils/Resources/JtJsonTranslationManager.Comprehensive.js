@@ -3300,6 +3300,26 @@
         Game_Interpreter._jtNobleMushroomPatched = true;
     }
 
+    //GameStartEval.js
+    //1.0.0
+    //MV
+    //wats this plugin for tho
+    function patch_GameStartEval() {
+        const enabled = $plugins.some(function (plugin) {
+            return plugin.status && plugin.name === 'GameStartEval;'
+        });
+        if (!enabled || Scene_Boot._jtGameStartEvalPatched) return;
+
+        const _start = Scene_Boot.prototype.start;
+        Scene_Battle.prototype.start = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _start.apply(this, arguments);
+            })
+        }
+
+        Scene_Boot._jtGameStartEvalPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -3385,6 +3405,7 @@
         patch_EventReSpawn();
         patch_RetryBattle();
         patch_NobleMushroom();
+        patch_GameStartEval();
     };
     //#endregion
 
