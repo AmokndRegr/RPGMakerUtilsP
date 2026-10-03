@@ -1140,7 +1140,11 @@
 
         const _Game_Actor_setup = Game_Actor.prototype.setup;
         Game_Actor.prototype.setup = function (actorId) {
-            _Game_Actor_setup.call(this, actorId);
+            TranslationManager.fetchRawData(() => {
+                return _Game_Actor_setup.call(this, actorId);
+            })
+            //fishy in vanilla setup sequence
+            //ref DynamicBattlerParam
 
             var actorData = $dataActors[actorId];
             if (!actorData) return;
@@ -1253,7 +1257,9 @@
 
         const _Game_Actor_setup = Game_Actor.prototype.setup;
         Game_Actor.prototype.setup = function (actorId) {
-            _Game_Actor_setup.call(this, actorId);
+            TranslationManager.fetchRawData(() => {
+                return _Game_Actor_setup.call(this, actorId);
+            })
             bindShadowFields(this);
         };
 
@@ -1294,7 +1300,7 @@
     function patch_DynamicDatabase_StringFields() {
         if (typeof DynamicDatabaseManager === 'undefined' ||
             typeof DynamicDatabaseManager._makePropertyString !== 'function' ||
-            DynamicDatabaseManager._jtStringPropertyPatched
+            DynamicDatabaseManager._jtDDStringPropertyPatched
         ) return;
 
         const manager = DynamicDatabaseManager;
@@ -1383,15 +1389,47 @@
             };
         }
 
-        manager._jtStringPropertyPatched = true;
+        manager._jtDDStringPropertyPatched = true;
+    }
+
+    function patch_DynamicDatabase_FormulaFields() {
+        if (typeof DynamicDatabaseManager === 'undefined' ||
+            typeof DynamicDatabaseManager._makePropertyFormula !== 'function' ||
+            DynamicDatabaseManager._jtDDFormulaPatched
+        ) return;
+
+        const _makePF = DynamicDatabaseManager._makePropertyFormula;
+        DynamicDatabaseManager._makePropertyFormula = function (parent, key) {
+            const result = _makePF.apply(this, arguments);
+
+            const descriptor = Object.getOwnPropertyDescriptor(parent, key);
+            if (!descriptor ||
+                typeof descriptor.get !== 'function' ||
+                !descriptor.configurable
+            ) return result;
+
+            const _oriGetter = descriptor.get;
+            descriptor.get = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return _oriGetter.call(this);
+                })
+            }
+
+            Object.defineProperty(parent, key, descriptor);
+            return result;
+        }
+
+        DynamicDatabaseManager._jtDDFormulaPatched = true;
     }
 
     //DynamicDatabase.js
     //1.3.5
     //MV
     //maybe also 2.1.4 MZ
+    //give up fine detail rawdatadepth control based on usage ig
     function patch_DynamicDatabaseComplex() {
         patch_DynamicDatabase_StringFields();
+        patch_DynamicDatabase_FormulaFields();
 
         if (isDynamicDatabaseActor()) {
             patch_DynamicDatabase_ActorFields();
@@ -3340,6 +3378,241 @@
         Scene_Boot._jtGameStartEvalPatched = true;
     }
 
+    //CustomizeConfigItem.js
+    //2.4.0
+    //MV
+    //cant do much abt it
+    function patch_CustomizeConfigItem() {
+        if (typeof Window_Options.prototype.execScript !== 'function' ||
+            Window_Options._jtCustomizeConfigItemPatched
+        ) return;
+
+        const _execS = Window_Options.prototype.execScript;
+        Window_Options.prototype.execScript = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _execS.apply(this, arguments);
+            })
+        }
+
+        Window_Options._jtCustomizeConfigItemPatched = true;
+    }
+
+    //MenuSubCommand.js
+    //2.8.0
+    //MV
+    //I hate all these vague scripts :/
+    function patch_MenuSubCommand() {
+        if (typeof Window_MenuCommand.prototype.makeSubCommandList !== 'function' ||
+            typeof Scene_Menu.prototype.executeSubScript !== 'function' ||
+            typeof Game_Temp.prototype.createMenuCommand !== 'function' ||
+            Window_MenuCommand._jtMenuSubCommandPatched
+        ) return;
+
+        const _makeSMCL = Window_MenuCommand.prototype.makeSubCommandList;
+        Window_MenuCommand.prototype.makeSubCommandList = function () {
+            return TranslationManager.disablePluginTrans(() => {
+                return _makeSMCL.apply(this, arguments);
+            })
+        }
+
+        const _executeSS = Scene_Menu.prototype.executeSubScript;
+        Scene_Menu.prototype.executeSubScript = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _executeSS.apply(this, arguments);
+            })
+        }
+
+        const _createMC = Game_Temp.prototype.createMenuCommand;
+        const patchedPrototypes = new WeakSet();
+        Game_Temp.prototype.createMenuCommand = function (commands) {
+            const result = _createMC.apply(this, arguments);
+
+            const parentName = commands.ParentName + commands.CommandId;
+            const parents = this._menuParentCommands;
+            if (!parents || typeof parents.get !== 'function') {
+                return result;
+            }
+
+            const subCommands = parents.get(parentName);
+            if (!Array.isArray(subCommands) || subCommands.length === 0) {
+                return result;
+            }
+
+            const instance = subCommands[subCommands.length - 1];
+            if (!instance || typeof instance !== 'object') {
+                return result;
+            }
+
+            const subCommandProto = Object.getPrototypeOf(instance);
+            if (!subCommandProto ||
+                patchedPrototypes.has(subCommandProto) ||
+                !Object.prototype.hasOwnProperty.call(subCommandProto, 'convert') ||
+                typeof subCommandProto.convert !== 'function'
+            ) {
+                return result;
+            }
+
+            const _convert = subCommandProto.convert;
+            subCommandProto.convert = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return _convert.apply(this, arguments);
+                })
+            }
+
+            patchedPrototypes.add(subCommandProto);
+            return result;
+        }
+
+        Window_MenuCommand._jtMenuSubCommandPatched = true;
+    }
+
+    //DynamicBattlerParam.js
+    //2.0.2
+    //MV
+    function patch_DynamicBattlerParam() {
+        const proto = Game_BattlerBase.prototype;
+        if (typeof proto.getDynamicParam !== 'function' ||
+            typeof proto.getParamFormula !== 'function' ||
+            typeof proto.special !== 'function' ||
+            Game_BattlerBase._jtDynamicBattlerParamPatched
+        ) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        };
+        proto.getDynamicParam = wrap(proto.getDynamicParam);
+        proto.getParamFormula = wrap(proto.getParamFormula);
+        proto.special = wrap(proto.special);
+
+        Game_BattlerBase._jtDynamicBattlerParamPatched = true;
+    }
+
+    //ParamTransfer.js
+    //1.4.0
+    //MV
+    function patch_ParamTransfer() {
+        if (typeof Game_BattlerBase.prototype.executeParamFormula !== 'function' ||
+            Game_BattlerBase._jtParamTransferPatched
+        ) return;
+
+        const _executePF = Game_BattlerBase.prototype.executeParamFormula;
+        Game_BattlerBase.prototype.executeParamFormula = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _executePF.apply(this, arguments);
+            })
+        }
+
+        Game_BattlerBase._jtParamTransferPatched = true;
+    }
+
+    //TraitConditions.js
+    //1.2.2
+    //MV
+    function patch_TraitConditions() {
+        if (typeof Game_BattlerBase.prototype.isValidTrait !== 'function' ||
+            typeof Game_BattlerBase.prototype.allTraits !== 'function' ||
+            Game_BattlerBase._jtTraitConditionsPatched
+        ) return;
+
+        const _isVT = Game_BattlerBase.prototype.allTraits;
+        Game_BattlerBase.prototype.allTraits = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _isVT.apply(this, arguments);
+                })
+            })
+        }
+
+        Game_BattlerBase._jtTraitConditionsPatched = true;
+    }
+
+    //NpcFollower.js
+    //1.2.0
+    //MV
+    function patch_NpcFollower() {
+        if (typeof Game_Interpreter.prototype.pluginCommandNpcFollower !== 'function' ||
+            Game_Interpreter._jtNpcFollowerPatched
+        ) return;
+
+        const _pluginCNF = Game_Interpreter.prototype.pluginCommandNpcFollower;
+        Game_Interpreter.prototype.pluginCommandNpcFollower = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _pluginCNF.apply(this, arguments);
+                })
+            })
+        }
+
+        Game_Interpreter._jtNpcFollowerPatched = true;
+    }
+
+    //CharacterPopupDamage.js
+    //1.6.1
+    //MV
+    function patch_CharacterPopupDamage() {
+        if (typeof Game_Interpreter.prototype.pluginCommandCharacterPopupDamage !== 'function' ||
+            Game_Interpreter._jtCharacterPopupDamagePatched
+        ) return;
+
+        const _pluginCCPD = Game_Interpreter.prototype.pluginCommandCharacterPopupDamage;
+        Game_Interpreter.prototype.pluginCommandCharacterPopupDamage = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _pluginCCPD.apply(this, arguments);
+                })
+            })
+        }
+
+        Game_Interpreter._jtCharacterPopupDamagePatched = true;
+    }
+
+    //MovieManager.js
+    //1.0.5
+    //MV
+    function patch_MovieManager() {
+        if (typeof Game_Interpreter.prototype.pluginCommandMovieManager !== 'function' ||
+            Game_Interpreter._jtMovieManagerPatched
+        ) return;
+
+        const _pluginCMM = Game_Interpreter.prototype.pluginCommandMovieManager;
+        Game_Interpreter.prototype.pluginCommandMovieManager = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _pluginCMM.apply(this, arguments);
+                })
+            })
+        }
+
+        Game_Interpreter._jtMovieManagerPatched = true;
+    }
+
+    //BattlerGraphicExtend.js
+    //1.4.3
+    //MV
+    function patch_BattlerGraphicExtend() {
+        if (typeof Game_BattlerBase.prototype.refreshGraphicInfo !== 'function' ||
+            typeof Game_BattlerBase.prototype.getStateMetaValuesForBge !== 'function' ||
+            Game_BattlerBase._jtBattlerGraphicExtendPatched
+        ) return;
+
+        const _refreshGI = Game_BattlerBase.prototype.refreshGraphicInfo;
+        Game_BattlerBase.prototype.refreshGraphicInfo = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _refreshGI.apply(this, arguments);
+                })
+            })
+        }
+
+        Game_BattlerBase._jtBattlerGraphicExtendPatched = true;
+    }
+
     //#endregion
 
     //#region Plugin
@@ -3426,6 +3699,15 @@
         patch_RetryBattle();
         patch_NobleMushroom();
         patch_GameStartEval();
+        patch_CustomizeConfigItem();
+        patch_MenuSubCommand();
+        patch_DynamicBattlerParam();
+        patch_ParamTransfer();
+        patch_TraitConditions();
+        patch_NpcFollower();
+        patch_CharacterPopupDamage();
+        patch_MovieManager();
+        patch_BattlerGraphicExtend();
     };
     //#endregion
 
@@ -3599,7 +3881,10 @@
     // Choices and other command window text
     const _Window_Command_addCommand = Window_Command.prototype.addCommand;
     Window_Command.prototype.addCommand = function (name, symbol, enabled = true, ext = null) {
-        _Window_Command_addCommand.call(this, TranslationManager.translate(name), symbol, enabled, ext);
+        if (TranslationManager._translationDisableDepth > 0) {
+            return _Window_Command_addCommand.apply(this, arguments);
+        }
+        return _Window_Command_addCommand.call(this, TranslationManager.translate(name), symbol, enabled, ext);
     };
 
     // Message window text
