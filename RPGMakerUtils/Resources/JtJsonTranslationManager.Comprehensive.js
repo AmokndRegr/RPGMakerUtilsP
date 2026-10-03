@@ -57,7 +57,7 @@
     TranslationManager._CECDepth = 0; //enable value/variable trans
     TranslationManager._translatedSkipDepth = 0; //disable trans but retain value/variable trans
 
-    TranslationManager._rawDataDepth = 0;
+    TranslationManager._rawDataDepth = 0; //dynamic object raw value switch
     TranslationManager._dataFieldStates = new WeakMap();
     TranslationManager._descriptionTemplateStates = new WeakMap();
     TranslationManager._descriptionTemplateTransDepth = 0;
@@ -1047,7 +1047,7 @@
                 }
             }
 
-            // Also variable and switch names
+            // Also variable and switch NAMES
             if ($dataSystem.variables) {
                 TranslationManager.bindDataArray($dataSystem.variables);
                 $dataSystem.variables.forEach(function (_, index) {
@@ -1966,20 +1966,40 @@
         ) return;
         if (Game_Variables._jtDynamicVariablesPatched) return;
 
-        const _getDynamic = Game_Variables.prototype.getDynamicValue;
-        const _SGetDynamic = Game_Switches.prototype.getDynamicValue;
-        Game_Variables.prototype.getDynamicValue = function (dynamicScript, id, value) {
-            const originalScript = TranslationManager.getRawData($dataSystem.variables, id);
-            const translatedScript = TranslationManager.getTranslatedData($dataSystem.variables, id);
-            if (dynamicScript === translatedScript) dynamicScript = originalScript;
-            return _getDynamic.call(this, dynamicScript, id, value);
-        };
-        Game_Switches.prototype.getDynamicValue = function (dynamicScript, id, value) {
-            const originalScript = TranslationManager.getRawData($dataSystem.switches, id);
-            const translatedScript = TranslationManager.getTranslatedData($dataSystem.switches, id);
-            if (dynamicScript === translatedScript) dynamicScript = originalScript;
-            return _SGetDynamic.call(this, dynamicScript, id, value);
-        };
+        const variableValue = Game_Variables.prototype.value;
+        const switchValue = Game_Switches.prototype.value;
+        const params = PluginManager.parameters('DynamicVariables');
+        const isDynamicVariable = function (variableId) {
+            return variableId >= params.DynamicVariableStart &&
+                variableId <= params.DynamicVariableEnd;
+        }
+        const isDynamicSwitch = function (switchId) {
+            return switchId >= params.DynamicSwitchStart &&
+                switchId <= params.DynamicSwitchEnd;
+        }
+
+        Game_Variables.prototype.value = function (variableId) {
+            if (!isDynamicVariable(variableId)) {
+                return variableValue.apply(this, arguments);
+            }
+
+            const translateForDisplay = !TranslationManager.isRawData() && TranslationManager._CECDepth > 0;
+            const result = TranslationManager.fetchRawData(() => {
+                return variableValue.apply(this, arguments);
+            })
+            //should mirror variable values trans gating
+            return translateForDisplay && typeof result === 'string' ? TranslationManager.translate(result) : result;
+        }
+
+        Game_Switches.prototype.value = function (switchId) {
+            if (!isDynamicSwitch(switchId))
+                return switchValue.apply(this, arguments);
+
+            return TranslationManager.fetchRawData(() => {
+                return switchValue.apply(this, arguments);
+            })
+        }
+
         Game_Variables._jtDynamicVariablesPatched = true;
     }
 
@@ -3655,6 +3675,7 @@
     // };
 
     //Base game function, it should be fine placed here?
+    //variable values trans
     const _Game_Variables_value = Game_Variables.prototype.value;
     Game_Variables.prototype.value = function (variableId) {
         const value = _Game_Variables_value.call(this, variableId);
