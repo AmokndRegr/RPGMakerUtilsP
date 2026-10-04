@@ -1978,6 +1978,8 @@
     //TraceEvent.js
     //1.2.0
     //MV
+    //1.3.1
+    //MZ
     function patch_TraceEvent() {
         if (typeof Game_Map.prototype.filterEventsByName !== 'function' ||
             typeof Game_Map.prototype.filterEventsByTag !== 'function'
@@ -3661,6 +3663,23 @@
         Game_BattlerBase._jtBattlerGraphicExtendPatched = true;
     }
 
+    //MessageNameCommon.js
+    //1.3.1
+    //MZ
+    function patch_MessageNameCommon() {
+        if (typeof Window_Message.prototype.callSpeakerCommon !== 'function' ||
+            Window_Message._jtMessageNameCommonPatched
+        ) return;
+
+        const _callSC = Window_Message.prototype.callSpeakerCommon;
+        Window_Message.prototype.callSpeakerCommon = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _callSC.apply(this, arguments);
+            })
+        }
+        Window_Message._jtMessageNameCommonPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -3767,6 +3786,7 @@
         patch_CharacterPopupDamage();
         patch_MovieManager();
         patch_BattlerGraphicExtend();
+        patch_MessageNameCommon();
     };
     //#endregion
 
