@@ -1718,6 +1718,35 @@
         Game_Interpreter._jtSimpleVoicePatched = true;
     }
 
+    //SimpleVoice.js
+    //2.0.5
+    //MZ
+    function patch_SimpleVoice_MZ() {
+        if (Utils.RPGMAKER_NAME !== "MZ" ||
+            PluginManager._jtSimpleVoiceMZPatched
+        ) return;
+
+        const commands = PluginManager._commands;
+        const keys = [
+            "SimpleVoice:PLAY_VOICE",
+            "SimpleVoice:STOP_VOICE"
+        ];
+        if (!commands ||
+            !keys.every(key => typeof commands[key] === 'function')
+        ) return;
+
+        for (const key of keys) {
+            const ori = commands[key];
+            commands[key] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                })
+            }
+        }
+
+        PluginManager._jtSimpleVoiceMZPatched = true;
+    }
+
     //PictureVariableSetting.js
     //1.5.3
     //MV
@@ -2136,10 +2165,35 @@
         Game_Interpreter._jtMoviePicturePatched = true;
     }
 
+    //MoviePicture.js
+    //2.3.1
+    //MZ
+    function patch_MoviePicture_MZ() {
+        if (typeof Game_Picture.prototype.showVideo !== 'function' ||
+            typeof Game_Enemy.prototype.updateVideoName !== 'function' ||
+            typeof ImageManager.getVideoFileExt !== 'function' ||
+            Game_Picture._jtMoviePictureMZPatched
+        ) return;
+
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        }
+        Game_Picture.prototype.showVideo = wrapRaw(Game_Picture.prototype.showVideo);
+        Game_Enemy.prototype.updateVideoName = wrapRaw(Game_Enemy.prototype.updateVideoName);
+        ImageManager.getVideoFileExt = wrapRaw(ImageManager.getVideoFileExt);
+        Game_Picture._jtMoviePictureMZPatched = true;
+    }
+
     //FileDownloader.js
     //1.1.0
     //MV
     //havent seen any use case yet
+    //1.1.0
+    //MZ
     function patch_FileDownloader() {
         if (typeof Game_Interpreter.prototype.pluginCommandFileDownloader !== 'function' ||
             Game_Interpreter._jtFileDownloaderPatched
@@ -3684,6 +3738,124 @@
         Window_Message._jtMessageNameCommonPatched = true;
     }
 
+    //PictureNameVariable.js
+    //1.1.1
+    //MZ
+    function patch_PictureNameVariable() {
+        if (Utils.RPGMAKER_NAME !== "MZ") return;
+
+        const commands = PluginManager._commands;
+        const key = "PictureNameVariable:SET_PICTURE_NAME";
+        if (!commands ||
+            typeof commands[key] !== 'function' ||
+            typeof Game_Picture.prototype.updateName !== 'function' ||
+            Game_Picture._jtPictureNameVariablePatched
+        ) return;
+
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        };
+        commands[key] = wrap(commands[key]);
+        Game_Picture.prototype.updateName = wrap(Game_Picture.prototype.updateName);
+        Game_Picture._jtPictureNameVariablePatched = true;
+    }
+
+    //PictureGrouping.js
+    //1.1.0
+    //MZ
+    function patch_PictureGrouping() {
+        if (typeof Game_Screen.prototype.addGroupingPicture !== 'function' ||
+            Game_Screen._jtPictureGroupingPatched
+        ) return;
+
+        const _addGP = Game_Screen.prototype.addGroupingPicture;
+        Game_Screen.prototype.addGroupingPicture = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _addGP.apply(this, arguments);
+            })
+        }
+        Game_Screen._jtPictureGroupingPatched = true;
+    }
+
+    //NameInputNg.js
+    //1.0.0
+    //MZ
+    //is it rlly necessary tho
+    //if its customized then it shouldnt be used in formulas ig?
+    function patch_NameInputNg() {
+        if (typeof Window_NameEdit.prototype.isNgName !== 'function' ||
+            Window_NameEdit._jtNameInputNgPatched
+        ) return;
+
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        }
+        Window_NameEdit.prototype.isNgName = wrapRaw(Window_NameEdit.prototype.isNgName);
+        //Window_NameEdit.prototype.setup = wrapRaw(Window_NameEdit.prototype.setup);
+        Window_NameEdit._jtNameInputNgPatched = true;
+    }
+
+    //AccumulateState.js
+    //2.4.1
+    //MV
+    function patch_AccumulateState() {
+        if (Utils.RPGMAKER_NAME !== 'MV' ||
+            Game_Interpreter._jtAccumulateStatePatched
+        ) return
+        const entries = [
+            [Game_Interpreter.prototype, 'pluginCommandAccumulateState'],
+            [Game_BattlerBase.prototype, 'getGaugeInfo'],
+            [Game_Action.prototype, 'applyResistanceForAccumulateState']
+        ]
+
+        if (entries.some(([proto, key]) =>
+            typeof proto[key] !== 'function'
+        )) return;
+
+        entries.forEach(([proto, key]) => {
+            const ori = proto[key];
+            proto[key] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments)
+                })
+            }
+        })
+        Game_Interpreter._jtAccumulateStatePatched = true;
+    }
+
+    //AccumulateState.js
+    //2.8.0final
+    //MZ
+    function patch_AccumulateState_MZ() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            Game_Action._jtAccumulateStateMZPatched
+        ) return;
+        if (typeof Game_Action.prototype.applyResistanceForAccumulateState !== 'function') return;
+        const wrap = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    });
+                });
+            };
+        };
+        Game_Action.prototype.applyResistanceForAccumulateState = wrap(Game_Action.prototype.applyResistanceForAccumulateState);
+        Scene_Base.prototype.createAccumulateState = wrap(Scene_Base.prototype.createAccumulateState);
+        Scene_Battle.prototype.createAccumulateState = wrap(Scene_Battle.prototype.createAccumulateState);
+        Game_Action._jtAccumulateStateMZPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -3718,6 +3890,7 @@
         patch_TorigoyaMZ_NotifyMessage();
         patch_PictureAnimation();
         patch_SimpleVoice();
+        patch_SimpleVoice_MZ();
         patch_PictureVariableSetting();
         patch_SystemSoundCustomize();
         patch_TF_LayeredMap();
@@ -3733,6 +3906,7 @@
         patch_DynamicActorGraphic();
         patch_DynamicDatabaseNote();
         patch_MoviePicture();
+        patch_MoviePicture_MZ();
         patch_FileDownloader();
         patch_StatusBustImage();
         patch_BattleActorFaceVisibility();
@@ -3791,6 +3965,11 @@
         patch_MovieManager();
         patch_BattlerGraphicExtend();
         patch_MessageNameCommon();
+        patch_PictureNameVariable();
+        patch_PictureGrouping();
+        patch_NameInputNg();
+        patch_AccumulateState();
+        patch_AccumulateState_MZ();
     };
     //#endregion
 
