@@ -3162,6 +3162,45 @@
         Game_Interpreter._jtCharacterPictureManagerPatched = true;
     }
 
+    //CharacterPictureManager.js
+    //3.20.0
+    //MZ
+    function patch_CharacterPictureManager_MZ() {
+        if (typeof Scene_Base.prototype.updateStandPicture !== 'function' ||
+            Scene_Base._jtCharacterPictureManagerMZPatched
+        ) return;
+
+        const patchedPrototypes = new WeakSet();
+        const _updateSP = Scene_Base.prototype.updateStandPicture;
+        Scene_Base.prototype.updateStandPicture = function (...args) {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    const result = _updateSP.apply(this, args);
+                    const actor = args[0];
+                    const sprite = actor && this._standSprites?.get(actor.actorId());
+                    const pictureParam = sprite?._pictures;
+                    const paramProto = pictureParam && Object.getPrototypeOf(pictureParam);
+                    if (paramProto &&
+                        !patchedPrototypes.has(paramProto) &&
+                        typeof paramProto.updatePictureFiles === 'function') {
+                        const _updateFiles = paramProto.updatePictureFiles;
+                        paramProto.updatePictureFiles = function () {
+                            return TranslationManager.fetchRawData(() => {
+                                return TranslationManager.disablePluginTrans(() => {
+                                    return _updateFiles.apply(this, arguments);
+                                })
+                            })
+                        }
+                        patchedPrototypes.add(paramProto);
+                    }
+                    return result;
+                })
+            })
+        }
+
+        Scene_Base._jtCharacterPictureManagerMZPatched = true;
+    }
+
     //FlexibleBattleBgm.js
     //1.0.1
     //MV
@@ -3624,7 +3663,13 @@
 
     //DestinationWindow.js
     //1.7.0
+    //MV
     //iconIndex@updateText isnt risk free, but discard
+
+    //AutoTranslation.js
+    //2.0.1
+    //MZ
+    //Take it as incompatible rn
 
     //#endregion
 
@@ -3705,6 +3750,7 @@
         patch_MapNameExtend();
         patch_CharacterGraphicManager();
         patch_CharacterPictureManager();
+        patch_CharacterPictureManager_MZ();
         patch_FlexibleBattleBgm();
         patch_FacePicture();
         patch_TkoolMV_PluginCommandBook();
