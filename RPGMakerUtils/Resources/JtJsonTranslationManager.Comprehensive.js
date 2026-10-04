@@ -2160,15 +2160,19 @@
     //StatusBustImage.js
     //1.9.0
     //MV
+    //1.9.4
+    //MZ
     function patch_StatusBustImage() {
         if (typeof Window_Base.prototype.refreshBust === 'function' &&
             !Window_Base._jtStatusBustImangePatched
         ) {
             const _refreshBust = Window_Base.prototype.refreshBust;
             Window_Base.prototype.refreshBust = function () {
-                return TranslationManager.disablePluginTrans(() => {
-                    return _refreshBust.call(this);
-                });
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _refreshBust.call(this);
+                    });
+                })
             };
             Window_Base._jtStatusBustImangePatched = true;
         }
