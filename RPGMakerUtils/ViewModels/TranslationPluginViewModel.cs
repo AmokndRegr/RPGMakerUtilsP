@@ -212,7 +212,8 @@ namespace RPGMakerUtils.ViewModels
                 // === Step 2: 读取整个文件内容 ===
                 string content = File.ReadAllText(GamePluginsJsPath);
 
-                try{
+                try
+                {
                     var match1 = Regex.Match(content, @"(?s)var\s+\$plugins\s*=\s*(\[.*\])\s*;");
                     // full json loaded, hopefully more robust
                     if (!match1.Success)
@@ -231,22 +232,27 @@ namespace RPGMakerUtils.ViewModels
                         return;
                     }
 
-                    var match2 = Regex.Match(content, @"var\s+\$plugins\s*=\s*\[");
-                    // don bother processing the remaining n writing bk tho
-                    if (!match2.Success)
-                    {
-                        MessageBox.Show("未找到插件数组声明。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }   // ded code ig
-
                     string pluginText = PluginLine.Trim().TrimEnd(',');
+                    var pluginParsed = JObject.Parse(pluginText);
+                    int insertIdx = 0;
+                    for (int i = 0; i < plugins.Count; i++)
+                    {
+                        string pluginName = (string)plugins[i]["name"] ?? string.Empty;
+                        string fileName = Path.GetFileName(pluginName.Replace('\\', '/'));
+                        bool enabled = (bool?)plugins[i]["status"] == true;
+                        if (enabled &&
+                            string.Equals(fileName, "VariableEscape", StringComparison.OrdinalIgnoreCase)
+                        )
+                        {
+                            insertIdx = i + 1;
+                        }
+                    }
 
+                    plugins.Insert(insertIdx, pluginParsed);
                     string nl = content.Contains("\r\n") ? "\r\n" : "\n";
-                    
-                    string insertText = nl + pluginText + ",";
-
-                    string newContent = content.Insert(match2.Index + match2.Length, insertText);
-
+                    string newText = plugins.ToString(Formatting.Indented).Replace("\r\n", "\n").Replace("\n", nl);
+                    var oriPlugin = match1.Groups[1];
+                    string newContent = content.Substring(0, oriPlugin.Index) + newText + content.Substring(oriPlugin.Index + oriPlugin.Length);
                     File.WriteAllText(GamePluginsJsPath, newContent);
 
                     await Utils.CopyEmbeddedFileAsync($"RPGMakerUtils.Resources.{SelectedPluginVersion}", TranslationPluginPath);
