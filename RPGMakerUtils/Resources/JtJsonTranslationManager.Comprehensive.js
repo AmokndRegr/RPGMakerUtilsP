@@ -1676,8 +1676,10 @@
 
         const _pluginCommandPictureAnimation = Game_Interpreter.prototype.pluginCommandPictureAnimation;
         Game_Interpreter.prototype.pluginCommandPictureAnimation = function (command, args) {
-            return TranslationManager.disablePluginTrans(() => {
-                _pluginCommandPictureAnimation.call(this, command, args)
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommandPictureAnimation.call(this, command, args)
+                })
             })
         }
 
@@ -1695,25 +1697,21 @@
         const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
 
         const simpleVoiceCommands = new Set([
-            'SV_ボイスの演奏',
-            'SV_PLAY_VOICE',
-            'SV_ボイスのループ演奏',
-            'SV_PLAY_LOOP_VOICE',
-            'SV_ボイスの停止',
-            'SV_STOP_VOICE',
-            'SV_ボイスの演奏の予約',
-            'SV_RESERVE_VOICE',
-            'SV_ボイスのループ演奏の予約',
-            'SV_RESERVE_LOOP_VOICE'
+            'SV_ボイスの演奏', 'SV_PLAY_VOICE',
+            'SV_ボイスのループ演奏', 'SV_PLAY_LOOP_VOICE',
+            'SV_ボイスの停止', 'SV_STOP_VOICE',
+            'SV_ボイスの演奏の予約', 'SV_RESERVE_VOICE',
+            'SV_ボイスのループ演奏の予約', 'SV_RESERVE_LOOP_VOICE'
         ].map(command => command.toUpperCase()));
 
         Game_Interpreter.prototype.pluginCommand = function (command, args) {
             if (simpleVoiceCommands.has(String(command).toUpperCase())) {
-                return TranslationManager.disablePluginTrans(() => {
-                    _pluginCommand.call(this, command, args);
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        _pluginCommand.call(this, command, args);
+                    })
                 })
             }
-
             _pluginCommand.call(this, command, args);
         }
 
@@ -1730,27 +1728,22 @@
         const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
 
         const PictureVariableSettingCommands = new Set([
-            'P_VARIABLE_VALID',
-            'P_VARIABLE_INVALID',
+            'P_VARIABLE_VALID', 'P_VARIABLE_INVALID',
             'P_D_FILENAME',
-            'P_TARGET_ALL',
-            'P_TARGET_RANGE',
-            'P_TARGET_MULTI',
-            'P_SPIN',
-            'P_SPIN_RELATIVE',
-            'P_SHAKE',
-            'P_STOP_SHAKE',
-            'P_OUT_OF_SCREEN_SHAKE_ON',
-            'P_OUT_OF_SCREEN_SHAKE_OFF'
+            'P_TARGET_ALL', 'P_TARGET_RANGE', 'P_TARGET_MULTI',
+            'P_SPIN', 'P_SPIN_RELATIVE',
+            'P_SHAKE', 'P_STOP_SHAKE',
+            'P_OUT_OF_SCREEN_SHAKE_ON', 'P_OUT_OF_SCREEN_SHAKE_OFF'
         ])
 
         Game_Interpreter.prototype.pluginCommand = function (command, args) {
             if (PictureVariableSettingCommands.has(String(command).toUpperCase())) {
-                return TranslationManager.disablePluginTrans(() => {
-                    _pluginCommand.call(this, command, args)
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        _pluginCommand.call(this, command, args)
+                    })
                 })
             }
-
             _pluginCommand.call(this, command, args)
         }
 
@@ -1777,11 +1770,12 @@
 
         Game_Interpreter.prototype.pluginCommand = function (command, args) {
             if (SystemSoundCustomizeCommands.has(String(command).toUpperCase())) {
-                return TranslationManager.disablePluginTrans(() => {
-                    _pluginCommand.call(this, command, args);
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        _pluginCommand.call(this, command, args);
+                    })
                 })
             }
-
             _pluginCommand.call(this, command, args);
         }
 
@@ -1819,18 +1813,24 @@
         const _actor = Game_Actor.prototype.canSelectTarget;
         const _enemy = Game_Enemy.prototype.canSelectTarget;
         Game_BattlerBase.prototype.canSelectTarget = function (item, user) {
-            return TranslationManager.disablePluginTrans(() => {
-                return _battler.call(this, item, user);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _battler.call(this, item, user);
+                })
             })
         };
         Game_Actor.prototype.canSelectTarget = function (item, user) {
-            return TranslationManager.disablePluginTrans(() => {
-                return _actor.call(this, item, user);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _actor.call(this, item, user);
+                })
             })
         };
         Game_Enemy.prototype.canSelectTarget = function (item, user) {
-            return TranslationManager.disablePluginTrans(() => {
-                return _enemy.call(this, item, user);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _enemy.call(this, item, user);
+                })
             })
         };
 
@@ -1899,8 +1899,10 @@
 
         const _pluginCommandChronus = Game_Interpreter.prototype.pluginCommandChronus;
         Game_Interpreter.prototype.pluginCommandChronus = function (command, args) {
-            return TranslationManager.disablePluginTrans(() => {
-                _pluginCommandChronus.call(this, command, args);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommandChronus.call(this, command, args);
+                })
             })
         }
 
@@ -1956,13 +1958,17 @@
         const _pluginCommandMessageWindowPopup = Game_Interpreter.prototype.pluginCommandMessageWindowPopup;
         const _getEventIdForMessagePopup = Game_Interpreter.prototype.getEventIdForMessagePopup;
         Game_Interpreter.prototype.pluginCommandMessageWindowPopup = function (command, args) {
-            return TranslationManager.disablePluginTrans(() => {
-                _pluginCommandMessageWindowPopup.call(this, command, args);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommandMessageWindowPopup.call(this, command, args);
+                })
             })
         }
         Game_Interpreter.prototype.getEventIdForMessagePopup = function (arg) {
-            return TranslationManager.disablePluginTrans(() => {
-                return _getEventIdForMessagePopup.call(this, arg);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _getEventIdForMessagePopup.call(this, arg);
+                })
             })
         }
 
@@ -1981,13 +1987,17 @@
         const _filterByName = Game_Map.prototype.filterEventsByName;
         const _filterByTag = Game_Map.prototype.filterEventsByTag;
         Game_Map.prototype.filterEventsByName = function (name, selfEvent) {
-            return TranslationManager.disablePluginTrans(() => {
-                return _filterByName.call(this, name, selfEvent);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _filterByName.call(this, name, selfEvent);
+                })
             })
         };
         Game_Map.prototype.filterEventsByTag = function (tagName, selfEvent) {
-            return TranslationManager.disablePluginTrans(() => {
-                return _filterByTag.call(this, tagName, selfEvent);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _filterByTag.call(this, tagName, selfEvent);
+                })
             })
         };
         Game_Map._jtTraceEventPatched = true;
@@ -2099,31 +2109,24 @@
         const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
 
         const MPCommands = new Set([
-            "MP_SET_MOVIE",
-            "MP_動画設定",
-            "MP_SET_LOOP",
-            "MP_ループ設定",
-            "MP_SET_SPEED",
-            "MP_速度設定",
-            "MP_SET_PAUSE",
-            "MP_ポーズ設定",
-            "MP_SET_WAIT",
-            "MP_ウェイト設定",
-            "MP_SET_LIMIT",
-            "MP_リミット設定",
-            "MP_SET_VOLUME",
-            "MP_音量設定",
-            "MP_SET_VOLUME_TYPE",
-            "MP_音量種別設定",
-            "MP_SET_OUTER_MOVIE",
-            "MP_外部動画設定",
+            "MP_SET_MOVIE", "MP_動画設定",
+            "MP_SET_LOOP", "MP_ループ設定",
+            "MP_SET_SPEED", "MP_速度設定",
+            "MP_SET_PAUSE", "MP_ポーズ設定",
+            "MP_SET_WAIT", "MP_ウェイト設定",
+            "MP_SET_LIMIT", "MP_リミット設定",
+            "MP_SET_VOLUME", "MP_音量設定",
+            "MP_SET_VOLUME_TYPE", "MP_音量種別設定",
+            "MP_SET_OUTER_MOVIE", "MP_外部動画設定",
         ]);
 
         Game_Interpreter.prototype.pluginCommand = function (command, args) {
             if (MPCommands.has(String(command).toUpperCase())) {
-                return TranslationManager.disablePluginTrans(() => {
-                    _pluginCommand.call(this, command, args);
-                });
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        _pluginCommand.call(this, command, args);
+                    });
+                })
             }
             _pluginCommand.call(this, command, args);
         };
@@ -2142,9 +2145,11 @@
 
         const _pluginCommandDownloader = Game_Interpreter.prototype.pluginCommandFileDownloader;
         Game_Interpreter.prototype.pluginCommandFileDownloader = function (command, args) {
-            return TranslationManager.disablePluginTrans(() => {
-                _pluginCommandDownloader.call(this, command, args);
-            });
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    _pluginCommandDownloader.call(this, command, args);
+                });
+            })
         };
 
         Game_Interpreter._jtFileDownloaderPatched = true;
@@ -2984,12 +2989,14 @@
 
         const wrap = function (fn) {
             return function () {
-                return TranslationManager.disablePluginTrans(() => {
-                    return fn.apply(this, arguments);
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    })
                 })
             }
         };
-        Game_Action.prototype.repeatTargets = wrap(Game_Action.prototype.repeatTargets);
+        Game_Action.prototype.getScopeExtendInfo = wrap(Game_Action.prototype.getScopeExtendInfo);
         Game_Action.prototype.numTargets = wrap(Game_Action.prototype.numTargets);
         Game_Action._jtScopeExtendPatched = true;
     }
@@ -3005,8 +3012,10 @@
 
         const wrap = function (fn) {
             return function () {
-                return TranslationManager.disablePluginTrans(() => {
-                    return fn.apply(this, arguments);
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    })
                 })
             }
         };
@@ -3612,6 +3621,10 @@
 
         Game_BattlerBase._jtBattlerGraphicExtendPatched = true;
     }
+
+    //DestinationWindow.js
+    //1.7.0
+    //iconIndex@updateText isnt risk free, but discard
 
     //#endregion
 
