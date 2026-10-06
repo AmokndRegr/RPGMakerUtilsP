@@ -1084,7 +1084,8 @@
 
             // Translate game title
             if ($dataSystem.gameTitle) {
-                $dataSystem.gameTitle = TranslationManager.translate($dataSystem.gameTitle);
+                TranslationManager.translateDataField($dataSystem, "gameTitle");
+                //$dataSystem.gameTitle = TranslationManager.translate($dataSystem.gameTitle);
             }
         }
 
@@ -1744,6 +1745,19 @@
             }
         }
 
+        const _playV = AudioManager.playVoice;
+        const _stopV = AudioManager.stopVoice;
+        AudioManager.playVoice = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _playV.apply(this, arguments);
+            })
+        }
+        AudioManager.stopVoice = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _stopV.apply(this, arguments);
+            })
+        }
+
         PluginManager._jtSimpleVoiceMZPatched = true;
     }
 
@@ -2349,6 +2363,50 @@
         Game_Interpreter._jtPictureCallCommonPatched = true;
     }
 
+    //PictureCallCommon.js
+    //1.6.4
+    //MZ
+    function patch_PictureCallCommon_MZ() {
+        if (Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof Game_Screen.prototype.addPictureEvent !== 'function' ||
+            typeof PluginManagerEx.createCommandArgs !== 'function' ||
+            PluginManagerEx._jtPictureCallCommonMZPatched
+        ) return;
+
+        const keys = new Set([
+            "PictureCallCommon:ADD_PICTURE_EVENT",
+            "PictureCallCommon:REMOVE_PICTURE_EVENT",
+            "PictureCallCommon:SET_PICTURE_PREFERENCE"
+        ]);
+
+        const _createCA = PluginManagerEx.createCommandArgs;
+        PluginManagerEx.createCommandArgs = function (args, commandKey) {
+            if (!keys.has(commandKey)) return _createCA.apply(this, arguments);
+
+            const result = TranslationManager.fetchRawData(() => {
+                return _createCA.apply(this, arguments);
+            });
+
+            if (!result || typeof result !== 'object') return result;
+
+            Object.getOwnPropertyNames(result).forEach(name => {
+                const descriptor = Object.getOwnPropertyDescriptor(result, name);
+                if (!descriptor ||
+                    !descriptor.configurable ||
+                    typeof descriptor.get !== 'function') return;
+                const getter = descriptor.get;
+                descriptor.get = function () {
+                    return TranslationManager.fetchRawData(() => {
+                        return getter.call(this);
+                    })
+                };
+                Object.defineProperty(result, name, descriptor);
+            });
+            return result;
+        }
+        PluginManagerEx._jtPictureCallCommonMZPatched = true;
+    }
+
     // BattleBalloon.js
     // 1.0.0
     // MV
@@ -2606,6 +2664,24 @@
         });
 
         Game_BattlerBase._jtCounterExtendPatched = true;
+    }
+
+    //CounterExtend.js
+    //3.1.0
+    //MZ
+    function patch_CounterExtend_MZ() {
+        if (Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof BattleManager.createCounterAction !== 'function' ||
+            BattleManager._jtCounterExtendMZPatched
+        ) return;
+
+        const _createCA = BattleManager.createCounterAction;
+        BattleManager.createCounterAction = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _createCA.apply(this, arguments)
+            })
+        }
+        BattleManager._jtCounterExtendMZPatched = true;
     }
 
     //DynamicEquipParam.js
@@ -3470,14 +3546,17 @@
     //1.0.0
     //MV
     //wats this plugin for tho
+    //1.0.0
+    //MZ
+    //variants actually identical
     function patch_GameStartEval() {
         const enabled = $plugins.some(function (plugin) {
-            return plugin.status && plugin.name === 'GameStartEval;'
+            return plugin.status && Utils.extractFileName(plugin.name) === 'GameStartEval';
         });
         if (!enabled || Scene_Boot._jtGameStartEvalPatched) return;
 
         const _start = Scene_Boot.prototype.start;
-        Scene_Battle.prototype.start = function () {
+        Scene_Boot.prototype.start = function () {
             return TranslationManager.fetchRawData(() => {
                 return _start.apply(this, arguments);
             })
@@ -3856,6 +3935,348 @@
         Game_Action._jtAccumulateStateMZPatched = true;
     }
 
+    //ActionEffectExtend.js
+    //1.0.0
+    //MZ
+    function patch_ActionEffectExtend() {
+        if (typeof Game_Action.prototype.findItemEffectExtend !== 'function' ||
+            typeof Game_Battler.prototype.applyEffectExtendItem !== 'function' ||
+            Game_Action._jtActionEffectExtendPatched
+        ) return;
+
+        const _findIEE = Game_Action.prototype.findItemEffectExtend;
+        const _applyEEI = Game_Battler.prototype.applyEffectExtendItem;
+        Game_Action.prototype.findItemEffectExtend = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _findIEE.apply(this, arguments);
+            })
+        }
+        Game_Battler.prototype.applyEffectExtendItem = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _applyEEI.apply(this, arguments);
+            })
+        }
+        Game_Action._jtActionEffectExtendPatched = true;
+    }
+
+    //AutoActionExclude.js
+    //1.1.0
+    //MZ
+    function patch_AutoActionExclude() {
+        if (typeof Game_Action.prototype.isAutoExclude !== 'function' ||
+            Game_Action._jtAutoActionExcludePatched
+        ) return;
+
+        const _isAE = Game_Action.prototype.isAutoExclude;
+        Game_Action.prototype.isAutoExclude = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _isAE.apply(this, arguments);
+            })
+        }
+        Game_Action._jtAutoActionExcludePatched = true;
+    }
+
+    //BattleLogReplace.js
+    //1.0.0
+    //MZ
+    //give up on reviving raw text to replace so basically useless, whatever
+    function patch_BattleLogReplace() {
+        if (typeof Window_BattleLog.prototype.isValidRegExp !== 'function' ||
+            Window_BattleLog._jtBattleLogReplacePatched
+        ) return;
+
+        const _isVRE = Window_BattleLog.prototype.isValidRegExp;
+        Window_BattleLog.prototype.isValidRegExp = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _isVRE.apply(this, arguments);
+                })
+            })
+        }
+        Window_BattleLog._jtBattleLogReplacePatched = true;
+    }
+
+    //ChargeTimeControl.js
+    //1.2.2
+    //MZ
+    function patch_ChargeTimeControl() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Game_Action.prototype.applyChangeChargeTime !== 'function' ||
+            typeof Game_Battler.prototype.findChargeTimeRate !== 'function' ||
+            Game_Action._jtChargeTimeControlPatched
+        ) return;
+
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        }
+        PluginManager._commands['ChargeTimeControl:ChangeChargeTime'] = wrapRaw(PluginManager._commands['ChargeTimeControl:ChangeChargeTime']);
+        PluginManager._commands['ChargeTimeControl:ChangeEnemyChargeTime'] = wrapRaw(PluginManager._commands['ChargeTimeControl:ChangeEnemyChargeTime']);
+        Game_Action.prototype.applyChangeChargeTime = wrapRaw(Game_Action.prototype.applyChangeChargeTime);
+        Game_Battler.prototype.findChargeTimeRate = wrapRaw(Game_Battler.prototype.findChargeTimeRate);
+        Game_Action._jtChargeTimeControlPatched = true;
+    }
+
+    //ConditionalXparam.js
+    //1.0.0
+    //MZ
+    function patch_ConditionalXparam() {
+        if (typeof Game_BattlerBase.prototype.isMatchXparamCondition !== 'function' ||
+            Game_BattlerBase._jtConditionalXparamPatched
+        ) return;
+
+        const _isMXC = Game_BattlerBase.prototype.isMatchXparamCondition;
+        Game_BattlerBase.prototype.isMatchXparamCondition = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _isMXC.apply(this, arguments);
+            })
+        }
+        Game_BattlerBase._jtConditionalXparamPatched = true;
+    }
+
+    //DamageSeEffective.js
+    //1.1.0
+    //MZ
+    function patch_DamageSeEffective() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof SoundManager.setDamageSeEffective !== 'function' ||
+            SoundManager._jtDamageSeEffectivePatched
+        ) return;
+
+        const _setDSE = SoundManager.setDamageSeEffective;
+        SoundManager.setDamageSeEffective = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _setDSE.apply(this, arguments);
+            })
+        }
+        SoundManager._jtDamageSeEffectivePatched = true;
+    }
+
+    //EncounterFormula.js
+    //1.0.0
+    //MZ
+    function patch_EncounterFormula() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            Game_Player._jtEncounterFormulaPatched
+        ) return;
+
+        const enabled = $plugins.some(function (plugin) {
+            return plugin.status && Utils.extractFileName(plugin.name) === 'EncounterFormula';
+        });
+        if (!enabled) return;
+
+        const _makeEC = Game_Player.prototype.makeEncounterCount;
+        Game_Player.prototype.makeEncounterCount = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _makeEC.apply(this, arguments);
+            })
+        }
+        Game_Player._jtEncounterFormulaPatched = true;
+    }
+
+    //EnemyOverlay.js
+    //1.1.0
+    //MZ
+    function patch_EnemyOverlay() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Game_Enemy.prototype.isValidOverlay !== 'function' ||
+            typeof Sprite_Enemy.prototype.createOverlaySprites !== 'function' ||
+            Game_Enemy._jtEnemyOverlayPatched
+        ) return;
+
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        }
+        Game_Enemy.prototype.isValidOverlay = wrapRaw(Game_Enemy.prototype.isValidOverlay);
+        Sprite_Enemy.prototype.createOverlaySprites = wrapRaw(Sprite_Enemy.prototype.createOverlaySprites);
+        Game_Enemy._jtEnemyOverlayPatched = true;
+    }
+
+    //ExtraGauge.js
+    //1.24.2
+    //MZ
+    //forget those niche layout entries, nobody will use N/P values to decide layout params...
+    function patch_ExtraGauge() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Sprite_ExtraGauge.prototype.findValue !== 'function' ||
+            Sprite_ExtraGauge._jtExtraGaugePatched
+        ) return;
+        const _findV = Sprite_ExtraGauge.prototype.findValue;
+        Sprite_ExtraGauge.prototype.findValue = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _findV.apply(this, arguments);
+            })
+        }
+        Sprite_ExtraGauge._jtExtraGaugePatched = true;
+    }
+
+    //ItemStealAction.js
+    //1.0.0
+    //MZ
+    function patch_ItemStealAction() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Game_Action.prototype.applyItemSteal !== 'function' ||
+            Game_Action._jtItemStealActionPatched
+        ) return;
+
+        const _applyIS = Game_Action.prototype.applyItemSteal;
+        Game_Action.prototype.applyItemSteal = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _applyIS.apply(this, arguments);
+            })
+        }
+        Game_Action._jtItemStealActionPatched = true;
+    }
+
+    //PartyCommandScene.js
+    //1.1.1
+    //MZ
+    function patch_PartyCommandScene() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof SceneManager.pushPartyCommandScene !== 'function' ||
+            SceneManager._jtPartyCommandScenePatched
+        ) return;
+        const _pushPCS = SceneManager.pushPartyCommandScene;
+        SceneManager.pushPartyCommandScene = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _pushPCS.apply(this, arguments);
+            })
+        }
+        SceneManager._jtPartyCommandScenePatched = true;
+    }
+
+    // RemoveStateExtend.js
+    // 1.3.0
+    // MZ
+    function patch_RemoveStateExtend() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Game_Battler.prototype.isRemoveStateExtend !== 'function' ||
+            Game_Battler._jtRemoveStateExtendPatched
+        ) return;
+        const _isRSE = Game_Battler.prototype.isRemoveStateExtend;
+        Game_Battler.prototype.isRemoveStateExtend = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _isRSE.apply(this, arguments);
+            })
+        }
+        Game_Battler._jtRemoveStateExtendPatched = true;
+    }
+
+    //SkillChange.js
+    //1.2.2
+    //MZ
+    function patch_SkillChange() {
+        if (Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof Game_Battler.prototype.meetsSkillChangeCondition !== "function" ||
+            Game_Battler._jtSkillChangePatched
+        ) return;
+        const _meetsSCC = Game_Battler.prototype.meetsSkillChangeCondition;
+        Game_Battler.prototype.meetsSkillChangeCondition = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _meetsSCC.apply(this, arguments);
+            })
+        }
+        Game_Battler._jtSkillChangePatched = true;
+    }
+
+    //SkillHitCondition.js
+    //1.2.1
+    //MZ
+    function patch_SkillHitCondition() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Game_Action.prototype.isValidHitCondition !== 'function' ||
+            Game_Action._jtSkillHitConditionPatched
+        ) return;
+        const _isVHC = Game_Action.prototype.isValidHitCondition;
+        Game_Action.prototype.isValidHitCondition = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _isVHC.apply(this, arguments);
+            })
+        }
+        Game_Action._jtSkillHitConditionPatched = true;
+    }
+
+    //StateEnchanter.js
+    //1.2.1
+    //MZ
+    function patch_StateEnchanter() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof BattleManager.updateEnchanterStates !== 'function' ||
+            BattleManager._jtStateEnchanterPatched
+        ) return;
+
+        const patchedPrototypes = new WeakSet();
+        const _updateES = BattleManager.updateEnchanterStates;
+        BattleManager.updateEnchanterStates = function () {
+            const states = this._enchanterStates;
+            if (Array.isArray(states)) {
+                for (const state of states) {
+                    if (!state) continue;
+                    const proto = Object.getPrototypeOf(state);
+                    if (!proto || patchedPrototypes.has(proto)) continue;
+                    const descriptor = Object.getOwnPropertyDescriptor(proto, 'isRemovable');
+                    if (!descriptor ||
+                        typeof descriptor.value !== 'function' ||
+                        !descriptor.writable) continue;
+                    const _isR = descriptor.value;
+                    proto.isRemovable = function () {
+                        return TranslationManager.fetchRawData(() =>
+                            _isR.apply(this, arguments)
+                        );
+                    };
+                    patchedPrototypes.add(proto);
+                }
+            }
+            return _updateES.apply(this, arguments);
+        }
+        BattleManager._jtStateEnchanterPatched = true;
+    }
+
+    //StateTrigger.js
+    //1.1.0
+    //MZ
+    function patch_StateTrigger() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Game_Battler.prototype.isStateTriggerValid !== 'function' ||
+            typeof Game_Battler.prototype.executeStateTriggerEffect !== 'function' ||
+            Game_Battler._jtStateTriggerPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        Game_Battler.prototype.isStateTriggerValid = wrapRaw(Game_Battler.prototype.isStateTriggerValid);
+        Game_Battler.prototype.executeStateTriggerEffect = wrapRaw(Game_Battler.prototype.executeStateTriggerEffect);
+        Game_Battler._jtStateTriggerPatched = true;
+    }
+
+    //TitleCall.js
+    //1.8.0
+    //MZ
+    function patch_TitleCall() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Scene_Title.prototype.playTitleCall !== 'function' ||
+            Scene_Title._jtTitleCallPatched
+        ) return;
+        const _playTC = Scene_Title.prototype.playTitleCall;
+        Scene_Title.prototype.playTitleCall = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _playTC.apply(this, arguments);
+            })
+        }
+        Scene_Title._jtTitleCallPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -3912,6 +4333,7 @@
         patch_BattleActorFaceVisibility();
         patch_BattleEffectPopup();
         patch_PictureCallCommon();
+        patch_PictureCallCommon_MZ();
         patch_BattleBalloon();
         patch_ParallelParty();
         patch_SceneNumberInput();
@@ -3922,6 +4344,7 @@
         patch_EventItemCondition();
         patch_CursedAction();
         patch_CounterExtend();
+        patch_CounterExtend_MZ();
         patch_DynamicEquipParam();
         patch_SubstituteExtend();
         patch_SealActorCommand();
@@ -3970,10 +4393,27 @@
         patch_NameInputNg();
         patch_AccumulateState();
         patch_AccumulateState_MZ();
+        patch_ActionEffectExtend();
+        patch_AutoActionExclude();
+        patch_BattleLogReplace();
+        patch_ChargeTimeControl();
+        patch_ConditionalXparam();
+        patch_DamageSeEffective();
+        patch_EncounterFormula();
+        patch_EnemyOverlay();
+        patch_ExtraGauge();
+        patch_ItemStealAction();
+        patch_PartyCommandScene();
+        patch_RemoveStateExtend();
+        patch_SkillChange();
+        patch_SkillHitCondition();
+        patch_StateEnchanter();
+        patch_StateTrigger();
+        patch_TitleCall();
     };
     //#endregion
 
-    function registerSGCategoryTrans() {
+    function _registerSGCategoryTrans() {
         if (!TranslationManager._dict || !TranslationManager._lengthKeyDict) return;
 
         const registered = new Set();
@@ -4106,7 +4546,7 @@
         _DataManager_onLoad.call(this, object);
         /*
         if (DataManager.isDatabaseLoaded() && !DataManager._translationApplied && TranslationManager.isInitialized()) {
-            registerSGCategoryTrans();
+            _registerSGCategoryTrans();
             TranslationManager.translateCommonData();
             patchPlugin();
             DataManager._translationApplied = true;
@@ -4128,7 +4568,7 @@
         const ready = _Scene_Boot_isReady.apply(this, arguments);
         if (ready && !DataManager._translationApplied && TranslationManager.isInitialized()) {
             patch_DescriptionTemplate();
-            registerSGCategoryTrans();
+            _registerSGCategoryTrans();
             TranslationManager.translateCommonData();
             patchPlugin();
             DataManager._translationApplied = true;
