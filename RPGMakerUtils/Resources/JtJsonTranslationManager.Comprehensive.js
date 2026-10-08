@@ -3550,9 +3550,16 @@
     //MZ
     //variants actually identical
     function patch_GameStartEval() {
+        /*
         const enabled = $plugins.some(function (plugin) {
             return plugin.status && Utils.extractFileName(plugin.name) === 'GameStartEval';
         });
+        */
+        //Utils.extractFileName() not compatible w/ MV
+        const enabled = $plugins.some(function (plugin) {
+            return plugin.status &&
+                String(plugin.name).split('/').pop() === 'GameStartEval';
+        })
         if (!enabled || Scene_Boot._jtGameStartEvalPatched) return;
 
         const _start = Scene_Boot.prototype.start;
@@ -4277,6 +4284,94 @@
         Scene_Title._jtTitleCallPatched = true;
     }
 
+    //TemplateEvent.js
+    //2.1.7
+    //MV
+    //1.4.0
+    //MZ
+    function patch_TemplateEvent() {
+        if (typeof Game_Event.prototype.generateTemplateId !== 'function' ||
+            typeof Game_Event.prototype.execConditionScriptForSelfVariable !== 'function' ||
+            Game_Event._jtTemplateEventPatched
+        ) return;
+
+        const wrapRaw = function (original) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return original.apply(this, arguments);
+                });
+            };
+        };
+
+        if (Utils.RPGMAKER_NAME === 'MV') {
+            const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
+
+            const templateEventCommands = new Set([
+                'TE固有イベント呼び出し', 'TE_CALL_ORIGIN_EVENT',
+                'TEマップイベント呼び出し', 'TE_CALL_MAP_EVENT',
+                'TEセルフ変数の操作', 'TE_SET_SELF_VARIABLE',
+                'TEセルフ変数の一括操作', 'TE_SET_RANGE_SELF_VARIABLE'
+            ].map(command => command.toUpperCase()));
+
+            Game_Interpreter.prototype.pluginCommand = function (command, args) {
+                if (templateEventCommands.has(String(command).toUpperCase())) {
+                    return TranslationManager.fetchRawData(() => {
+                        _pluginCommand.call(this, command, args);
+                    })
+                }
+                _pluginCommand.call(this, command, args);
+            }
+        } else {
+            const commands = PluginManager._commands;
+            const pluginName = 'TemplateEvent';
+            const commandNames = [
+                'CALL_ORIGIN_EVENT',
+                'CALL_MAP_EVENT',
+                'CALL_TEMPLATE_EVENT',
+                'SET_SELF_VARIABLE',
+                'SET_RANGE_SELF_VARIABLE'
+            ];
+            const commandKeys = commandNames.map(function (commandName) {
+                return pluginName + ':' + commandName;
+            });
+
+            if (!commands) return;
+            commandKeys.forEach(function (key) {
+                commands[key] = wrapRaw(commands[key]);
+            });
+        }
+
+        Game_Event.prototype.generateTemplateId = wrapRaw(Game_Event.prototype.generateTemplateId);
+        Game_Event.prototype.execConditionScriptForSelfVariable = wrapRaw(Game_Event.prototype.execConditionScriptForSelfVariable);
+        const _controlSV = Game_Event.prototype.controlSelfVariable;
+        Game_Event.prototype.controlSelfVariable = function (index, type, operand, formulaFlg) {
+            if (!formulaFlg) {
+                return _controlSV.apply(this, arguments);
+            }
+            return TranslationManager.fetchRawData(() => {
+                return _controlSV.apply(this, arguments);
+            })
+        }
+
+        if (typeof Game_PrefabEvent !== 'undefined' &&
+            Object.prototype.hasOwnProperty.call(Game_PrefabEvent.prototype, 'controlSelfVariable')
+        ) {
+            const _copiedSV = Game_PrefabEvent.prototype.controlSelfVariable;
+            if (typeof _copiedSV === 'function') {
+                Game_PrefabEvent.prototype.controlSelfVariable = function (index, type, operand, formulaFlg) {
+                    if (!formulaFlg) {
+                        return _copiedSV.apply(this, arguments);
+                    }
+                    return TranslationManager.fetchRawData(() => {
+                        return _copiedSV.apply(this, arguments);
+                    })
+                }
+            }
+        }
+
+        Game_Event._jtTemplateEventPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -4410,6 +4505,7 @@
         patch_StateEnchanter();
         patch_StateTrigger();
         patch_TitleCall();
+        patch_TemplateEvent();
     };
     //#endregion
 
