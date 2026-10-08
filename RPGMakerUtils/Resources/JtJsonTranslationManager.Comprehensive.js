@@ -1933,6 +1933,46 @@
         Game_Interpreter._jtDTextPicturePatched = true;
     }
 
+    //DTextPicture.js
+    //2.10.2
+    //MZ
+    function patch_DTextPicture_MZ() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            Game_Picture._jtDTextPictureMZPatched
+        ) return;
+
+        const commands = PluginManager._commands;
+        const keys = [
+            "DTextPicture:dText",
+            "DTextPicture:dTextSetting",
+            "DTextPicture:dTextSettingClear",
+            "DTextPicture:windowCursor"
+        ];
+        if (!commands ||
+            !keys.every(key => typeof commands[key] === 'function')
+        ) return;
+
+        for (const key of keys) {
+            const ori = commands[key];
+            commands[key] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return ori.apply(this, arguments);
+                    })
+                })
+            }
+        };
+
+        //could still be risky?
+        const _updateDT = Game_Picture.prototype.updateDText;
+        Game_Picture.prototype.updateDText = function () {
+            return TranslationManager.enableValueTrans(() => {
+                return _updateDT.apply(this, arguments);
+            })
+        };
+        Game_Picture._jtDTextPictureMZPatched = true;
+    }
+
     //Chronus.js
     //1.18.0
     //MV
@@ -4463,6 +4503,15 @@
     //MZ
     //on hold
 
+    //NameBoxNoUse.js
+    //1.1.1
+    //MZ
+    //maybe trans preproc needed?
+
+    //MessageAutoPrefix.js
+    //1.3.1
+    //adding prefix should be fine for translate()
+
     //#endregion
 
     //#region Plugin
@@ -4494,6 +4543,7 @@
         patch_RestrictionTargetSkill();
         patch_SelfSwitchTemporary();
         patch_DTextPicture();
+        patch_DTextPicture_MZ();
         patch_Chronus();
         patch_MKR_PlayerSensor();
         patch_MakeScreenCapture();
