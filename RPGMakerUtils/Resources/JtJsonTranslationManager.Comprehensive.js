@@ -854,7 +854,11 @@
         finally {
             TranslationManager._descriptionTemplateTransDepth--;
         }
-        template = template.replace(/\\n/g, '\n');
+
+        if (Utils.RPGMAKER_NAME === 'MV') {
+            template = template.replace(/\\n/g, '\n');
+        }
+
         return template.replace(/\$\{(.*?)}/g, function (_, propName) {
             if (propName === 'description') {
                 return textValue(data, 'prevDesc', false);
@@ -875,7 +879,7 @@
 
     //DescriptionTemplate.js
     //1.0.0
-    //MV
+    //MV/MZ
     //hard coded
     function patch_DescriptionTemplate() {
         [$dataItems, $dataSkills, $dataWeapons, $dataArmors].forEach(function (array) {
@@ -885,6 +889,7 @@
                 if (!state) return;
                 const descriptor = Object.getOwnPropertyDescriptor(data, 'description');
                 if (!descriptor || descriptor.get !== state.nativeGetter) return;
+                //DT has description configurable left empty, but its an existing object
                 TranslationManager.bindDerivedDataField(data,
                     'description',
                     function () {
