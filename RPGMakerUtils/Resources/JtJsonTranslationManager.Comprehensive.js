@@ -4179,6 +4179,7 @@
     //forget those niche layout entries, nobody will use N/P values to decide layout params...
     function patch_ExtraGauge() {
         if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Sprite_ExtraGauge === 'undefined' ||
             typeof Sprite_ExtraGauge.prototype.findValue !== 'function' ||
             Sprite_ExtraGauge._jtExtraGaugePatched
         ) return;
