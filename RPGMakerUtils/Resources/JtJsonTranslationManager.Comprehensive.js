@@ -2851,6 +2851,8 @@
     // ShakeOnDamage.js
     // 1.2.0
     // MV
+    // 1.1.0
+    // MZ
     function patch_ShakeOnDamage() {
         if (typeof Game_Battler.prototype.convertShakeParameter !== 'function' ||
             Game_Battler._jtShakeOnDamagePatched
@@ -2862,6 +2864,12 @@
                 return TranslationManager.disablePluginTrans(() => {
                     return _convertShakeParameter.call(this, param);
                 })
+            })
+        }
+        const _shakeOD = Game_Battler.prototype.shakeOnDamage;
+        Game_Battler.prototype.shakeOnDamage = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _shakeOD.apply(this, arguments);
             })
         }
 
@@ -3691,7 +3699,8 @@
     //1.4.0
     //MV
     function patch_ParamTransfer() {
-        if (typeof Game_BattlerBase.prototype.executeParamFormula !== 'function' ||
+        if (Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_BattlerBase.prototype.executeParamFormula !== 'function' ||
             Game_BattlerBase._jtParamTransferPatched
         ) return;
 
@@ -3703,6 +3712,24 @@
         }
 
         Game_BattlerBase._jtParamTransferPatched = true;
+    }
+
+    //ParamTransfer.js
+    //1.5.0
+    //MZ
+    function patch_ParamTransfer_MZ() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Game_BattlerBase.prototype.getTransParam !== 'function' ||
+            Game_BattlerBase._jtParamTransferMZPatched
+        ) return;
+
+        const _getTP = Game_BattlerBase.prototype.getTransParam;
+        Game_BattlerBase.prototype.getTransParam = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _getTP.apply(this, arguments);
+            })
+        }
+        Game_BattlerBase._jtParamTransferMZPatched = true;
     }
 
     //TraitConditions.js
@@ -4372,6 +4399,52 @@
         Game_Event._jtTemplateEventPatched = true;
     }
 
+    //DescriptionExtend.js
+    //1.3.1
+    //MZ
+    function patch_DescriptionExtend() {
+        if (typeof PluginManagerEx === 'undefined' ||
+            typeof PluginManagerEx.findMetaValue !== 'function' ||
+            typeof Window_Help.prototype.isValidDescriptionExtend !== 'function' ||
+            Window_Help._jtDescriptionExtendPatched
+        ) return;
+        const _findMV = PluginManagerEx.findMetaValue;
+        PluginManagerEx.findMetaValue = function (object, nameList) {
+            const isExtendDesc = Array.isArray(nameList) && nameList.length === 2 && nameList[0] === '拡張説明' && nameList[1] === 'ExtendDesc';
+            if (!isExtendDesc) {
+                return _findMV.apply(this, arguments);
+            };
+            return TranslationManager.fetchRawData(() => {
+                return _findMV.apply(this, arguments);
+            })
+        }
+        Window_Help._jtDescriptionExtendPatched = true;
+    }
+
+    //ProfileExtend.js
+    //1.1.1
+    //MV/MZ
+    function patch_ProfileExtend() {
+        if (typeof Game_Interpreter.prototype.setExtendProfile !== 'function' ||
+            typeof Game_Actor.prototype.getExtendProfile !== 'function' ||
+            typeof Game_Actor.prototype.setExtendProfile !== 'function' ||
+            Game_Interpreter._jtProfileExtendPatched
+        ) return;
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            const name = typeof command === 'string' ? command.toUpperCase() : '';
+            if (name !== 'PE_拡張プロフィール設定' && name !== 'PE_SET_EXTEND_PROFILE') {
+                return _pluginC.apply(this, arguments);
+            };
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _pluginC.apply(this, arguments);
+                })
+            })
+        };
+        Game_Interpreter._jtProfileExtendPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -4381,6 +4454,14 @@
     //2.0.1
     //MZ
     //Take it as incompatible rn
+
+    //ConvertKinokoTakenoko.js
+    //idk tf its for, discard
+
+    //EscapeInvalidate.js
+    //1.1.2
+    //MZ
+    //on hold
 
     //#endregion
 
@@ -4477,6 +4558,7 @@
         patch_MenuSubCommand();
         patch_DynamicBattlerParam();
         patch_ParamTransfer();
+        patch_ParamTransfer_MZ();
         patch_TraitConditions();
         patch_NpcFollower();
         patch_CharacterPopupDamage();
@@ -4506,6 +4588,8 @@
         patch_StateTrigger();
         patch_TitleCall();
         patch_TemplateEvent();
+        patch_DescriptionExtend();
+        patch_ProfileExtend();
     };
     //#endregion
 
