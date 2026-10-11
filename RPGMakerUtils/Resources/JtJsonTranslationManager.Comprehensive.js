@@ -1448,6 +1448,8 @@
     //ItemNameEscape.js
     //1.0.2
     //MV
+    //1.1.2
+    //MZ
     function patch_ItemNameEscape() {
         if (typeof DataManager.convertName !== 'function' ||
             typeof DataManager.databaseEscape !== 'function' ||
@@ -1692,6 +1694,39 @@
         Game_Interpreter._jtPictureAnimationPatched = true;
     }
 
+    //PictureAnimation.js
+    //1.1.3
+    //MZ
+    function patch_PictureAnimation_MZ() {
+        if (Utils.RPGMAKER_NAME !== "MZ") return;
+        const proto = Game_Picture.prototype;
+        if (typeof proto.setAnimationFrameInit !== 'function' ||
+            proto._jtPictureAnimationMZPatched
+        ) return;
+
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        const commands = PluginManager._commands;
+        for (const command of [
+            "INIT",
+            "START",
+            "STOP",
+            "SET_CELL",
+            "LINK_VARIABLE",
+            "LINK_SOUND"
+        ]) {
+            commands['PictureAnimation:' + command] = wrapRaw(commands['PictureAnimation:' + command]);
+        };
+        proto.isEndFirstLoop = wrapRaw(proto.isEndFirstLoop);
+        proto.playCellSe = wrapRaw(proto.playCellSe);
+        proto._jtPictureAnimationMZPatched = true;
+    }
+
     //SimpleVoice.js
     //1.3.0
     //MV
@@ -1801,6 +1836,7 @@
     //SystemSoundCustomize.js
     //1.0.0
     //MV
+    //MZ hitting /name$/gi in PluginCommonBase so should be safe?
     function patch_SystemSoundCustomize() {
         if (typeof Game_Interpreter.prototype.execChangeSystemSe !== 'function' ||
             typeof Game_Interpreter.prototype.execResetSystemSe !== 'function'
@@ -1981,6 +2017,7 @@
     //Chronus.js
     //1.18.0
     //MV
+    //MZ i don think ppl d use logic like $dataActors[1]['n'+'a'+'me'] === 'Alice' ? HH24 * 60 + MI : 0
     function patch_Chronus() {
         if (typeof Game_Interpreter.prototype.pluginCommandChronus !== 'function') return;
         if (Game_Interpreter._jtChronusPatched) return;
@@ -2035,6 +2072,64 @@
         }
     }
 
+    //MakeScreenCapture.js
+    //2.0.0
+    //MZ
+    function patch_MakeScreenCapture_MZ() {
+        if (Utils.RPGMAKER_NAME !== 'MZ') return;
+        const proto = Bitmap.prototype;
+        if (proto._jtMakeScreenCaptureMZPatched ||
+            typeof proto.signImage !== 'function' ||
+            typeof proto.drawSignBitmap !== 'function' ||
+            typeof proto.signText !== 'function' ||
+            typeof PluginManagerEx === 'undefined'
+        ) return;
+
+        const _signI = proto.signImage;
+        const _drawSB = proto.drawSignBitmap;
+        const _signT = proto.signText;
+        proto.signImage = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _signI.apply(this, arguments);
+            })
+        };
+        proto.drawSignBitmap = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _drawSB.apply(this, arguments);
+            })
+        };
+        const readSignatureText = function (signature) {
+            return TranslationManager.fetchRawData(() => {
+                const storage = signature && signature._parameter;
+                const hasSource = storage && Object.prototype.hasOwnProperty.call(storage, 'signature');
+                if (!hasSource) {
+                    return TranslationManager.translate(signature.signature);
+                };
+                const source = storage.signature;
+                const template = TranslationManager.translate(source);
+                const expanded = TranslationManager.enableValueTrans(() => {
+                    PluginManagerEx.convertVariables(template);
+                });
+                return template === source ? TranslationManager.translate(expanded) : expanded;
+            })
+        };
+        proto.signText = function (signature) {
+            const text = readSignatureText(signature);
+            if (!text) return;
+            const view = TranslationManager.fetchRawData(() => ({
+                signature: text,
+                fontFace: signature.fontFace,
+                fontSize: signature.fontSize,
+                fontColor: signature.fontColor,
+                align: signature.align
+            }));
+            return TranslationManager.skipPluginTrans(() => {
+                return _signT.call(this, view);
+            });
+        }
+        proto._jtMakeScreenCaptureMZPatched = true;
+    }
+
     //MessageWindowPopup.js
     //2.16.3
     //MV
@@ -2061,6 +2156,46 @@
         }
 
         Game_Interpreter._jtMessageWindowPopupPatched = true;
+    }
+
+    //MessageWindowPopup.js
+    //1.5.1
+    //MZ
+    function patch_MessageWindowPopup_MZ() {
+        if (Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof PluginManagerEx === "undefined" ||
+            typeof Game_System.prototype.getTailImage !== "function" ||
+            Game_System._jtMessageWindowPopupMZPatched
+        ) return;
+        const commands = PluginManager._commands;
+        const keys = [
+            "MessageWindowPopup:POPUP_VALID",
+            "MessageWindowPopup:POPUP_INVALID",
+            "MessageWindowPopup:FREE_POPUP_VALID",
+            "MessageWindowPopup:SUB_WINDOW_SETTING",
+            "MessageWindowPopup:POPUP_WINDOW_SETTING",
+            "MessageWindowPopup:POPUP_ADJUST_POSITION",
+            "MessageWindowPopup:POPUP_ADJUST_SIZE",
+            "MessageWindowPopup:CHANGE_TAIL",
+            "MessageWindowPopup:BATTLE_POPUP_VALID"
+        ];
+        if (!commands) return;
+        for (const key of keys) {
+            const ori = commands[key];
+            if (typeof ori !== 'function') continue;
+            commands[key] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                })
+            };
+        };
+        const _getTI = Game_System.prototype.getTailImage;
+        Game_System.prototype.getTailImage = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _getTI.apply(this, arguments);
+            })
+        };
+        Game_System._jtMessageWindowPopupMZPatched = true;
     }
 
     //TraceEvent.js
@@ -2162,7 +2297,9 @@
     //DynamicDatabaseNote.js
     //1.0.0
     //MV
+    //MZ 1.1.0 safe
     function patch_DynamicDatabaseNote() {
+        if (Utils.RPGMAKER_NAME !== "MV") return;
         if (typeof Game_Interpreter.prototype.changeDataNote !== 'function' ||
             Game_Interpreter._jtDynamicDatabaseNotePatched
         ) return;
@@ -2306,6 +2443,7 @@
     //BattleActorFaceVisibility.js
     //1.6.0
     //MV
+    //MZ safe
     function patch_BattleActorFaceVisibility() {
         if (typeof Scene_Battle.prototype.createFaceWindow !== 'function' ||
             Scene_Battle._jtBattleActorFacePatched
@@ -2335,6 +2473,7 @@
     //BattleEffectPopup.js
     //1.12.2
     //MV
+    //MZ ignoring %1 trans mismatch
     function patch_BattleEffectPopup() {
         if (typeof Game_Interpreter.prototype.pluginCommandBattleEffectPopup !== 'function' ||
             Game_Interpreter._jtBattleEffectPopupPatched
@@ -2878,6 +3017,8 @@
     //SaveFileLoadOnly.js
     //1.0.0
     //MV
+    //1.1.1
+    //MZ
     function patch_SaveFileLoadOnly() {
         if (typeof Window_SavefileList.prototype.isLoadOnly !== 'function' ||
             Window_SavefileList._jtSaveFileLoadOnlyPatched
@@ -2885,8 +3026,10 @@
 
         const _isLoadOnly = Window_SavefileList.prototype.isLoadOnly;
         Window_SavefileList.prototype.isLoadOnly = function (fileId) {
-            return TranslationManager.disablePluginTrans(() => {
-                return _isLoadOnly.call(this, fileId);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _isLoadOnly.apply(this, arguments);
+                })
             });
         }
 
@@ -3393,6 +3536,7 @@
     //FlexibleBattleBgm.js
     //1.0.1
     //MV
+    //MZ name hits /name$/gi, hence safe
     function patch_FlexibleBattleBgm() {
         if (typeof Game_Interpreter.prototype.pluginCommandFlexibleBattleBgm !== 'function' ||
             Game_Interpreter._jtFlexibleBattleBgmPatched
@@ -3534,6 +3678,9 @@
     //RetryBattle.js
     //1.4.0
     //MV
+    //1.6.1
+    //MZ
+    //there might be some trans omission but can live w/ ig
     function patch_RetryBattle() {
         if (typeof DataManager.saveGameForRetry !== 'function' ||
             DataManager._jtRetryBattlePatched
@@ -3552,6 +3699,9 @@
     //NobleMushroom.js
     //1.12.1
     //MV
+    //1.11.3
+    //MZ
+    //INPUT_NAME／名前入力 arg0 should be fine in most cases
     function patch_NobleMushroom() {
         if (typeof Game_Interpreter.prototype.pluginCommandBlueMushroom !== 'function' ||
             typeof Game_Message.prototype.popupNameInputPrompt !== 'function' ||
@@ -3649,6 +3799,7 @@
     //MV
     //I hate all these vague scripts :/
     function patch_MenuSubCommand() {
+        if (Utils.RPGMAKER_NAME !== "MV") return;
         if (typeof Window_MenuCommand.prototype.makeSubCommandList !== 'function' ||
             typeof Scene_Menu.prototype.executeSubScript !== 'function' ||
             typeof Game_Temp.prototype.createMenuCommand !== 'function' ||
@@ -3710,6 +3861,109 @@
             return result;
         }
 
+        Window_MenuCommand._jtMenuSubCommandPatched = true;
+    }
+
+    //MenuSubCommand.js
+    //4.1.1
+    //MZ
+    function patch_MenuSubCommand_MZ() {
+        if (typeof PluginManagerEx === 'undefined' ||
+            typeof Game_Temp.prototype.createMenuCommand !== 'function' ||
+            typeof Scene_Menu.prototype.createSubMenuCommandWindow !== 'function' ||
+            typeof Window_MenuCommand.prototype.makeSubCommandList !== 'function' ||
+            Window_MenuCommand._jtMenuSubCommandPatched
+        ) return;
+        const wrapped = new WeakMap();
+        function wrapLoacl(target, name) {
+            if (!target || typeof target[name] !== 'function') return;
+            let names = wrapped.get(target);
+            if (!names) {
+                names = new Set();
+                wrapped.set(target, names);
+            };
+            if (names.has(name)) return;
+
+            const ori = target[name];
+            target[name] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                })
+            };
+            names.add(name);
+        };
+
+        wrapLoacl(Game_Temp.prototype, 'createMenuCommands');
+        //indeed there r two of them :o
+        const _createC = Game_Temp.prototype.createMenuCommand;
+        Game_Temp.prototype.createMenuCommand = function (commands) {
+            return TranslationManager.fetchRawData(() => {
+                const result = _createC.apply(this, arguments);
+                const key = commands.ParentName + commands.CommandId;
+                const items = this._menuParentCommands?.get(key);
+                const instance = items && items[items.length - 1];
+                if (instance) {
+                    const proto = Object.getPrototypeOf(instance);
+                    [
+                        "isReturnMap",
+                        "isVisible",
+                        "isEnable",
+                        "isNeedSelectMember",
+                        "getSelectionScript",
+                        "getMoveTargetMap"
+                    ].forEach(name => wrapLoacl(proto, name));
+                };
+                return result;
+            })
+        };
+
+        const _makeL = Window_MenuCommand.prototype.makeSubCommandList;
+        Window_MenuCommand.prototype.makeSubCommandList = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _makeL.apply(this, arguments);
+                })
+            })
+        };
+
+        [
+            "needsCommand",
+            "calculateSubCommandX",
+            "calculateSubCommandY"
+        ].forEach(name => wrapLoacl(Window_MenuCommand.prototype, name));
+
+        [
+            "loadSubCommandWindowSkin",
+            "commandParent",
+            "removeSubMenuCommandWindow",
+            "onSubCommandOk",
+            "executeSubCommand",
+            "executeSubScript"
+        ].forEach(name => wrapLoacl(Scene_Menu.prototype, name));
+
+        [
+            "reserveTransferToSubCommandMap",
+            "reserveTransferToOriginalMap"
+        ].forEach(name => wrapLoacl(Game_Player.prototype, name));
+
+        const _createSMCW = Scene_Menu.prototype.createSubMenuCommandWindow;
+        Scene_Menu.prototype.createSubMenuCommandWindow = function () {
+            return TranslationManager.fetchRawData(() => {
+                const result = _createSMCW.apply(this, arguments);
+                const instance = this._subMenuWindow;
+                if (instance) {
+                    const proto = Object.getPrototypeOf(instance);
+                    [
+                        "loadWindowskin",
+                        "itemTextAlign",
+                        "windowWidth",
+                        "numVisibleRows",
+                        "maxCols"
+                    ].forEach(name => wrapLoacl(proto, name));
+                };
+                return result;
+            })
+        };
         Window_MenuCommand._jtMenuSubCommandPatched = true;
     }
 
@@ -4491,6 +4745,37 @@
         Game_Interpreter._jtProfileExtendPatched = true;
     }
 
+    //AttackChain.js
+    //3.0.3
+    //MZ
+    function patch_AttackChain() {
+        if (typeof Sprite_ChainCount === "undefined") return;
+        const proto = Sprite_ChainCount.prototype;
+        if (!proto ||
+            typeof proto.updateFont !== 'function' ||
+            Sprite_ChainCount._jtAttackChainPatched
+        ) return;
+        const commands = [
+            "loadStaticBitmap",
+            "getFontFace",
+            "getFontSize",
+            "isFontItalic",
+            "getOutlineWidth",
+            "getOutlineColor",
+            "getTextColor"
+        ];
+        for (const name of commands) {
+            const ori = proto[name];
+            if (typeof ori !== 'function') continue;
+            proto[name] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                })
+            }
+        };
+        Sprite_ChainCount._jtAttackChainPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -4518,6 +4803,16 @@
     //1.3.1
     //adding prefix should be fine for translate()
 
+    //AnotherNewGame.js
+    //4.3.4
+    //MZ
+    //nobody d read \N[n] in logic
+
+    //BattleEndMessage.js
+    //1.1.0
+    //MZ
+    //might miss some trans
+
     //#endregion
 
     //#region Plugin
@@ -4541,6 +4836,7 @@
         patch_TorigoyaMZ_NotifyMessage_AddonGetItem();
         patch_TorigoyaMZ_NotifyMessage();
         patch_PictureAnimation();
+        patch_PictureAnimation_MZ();
         patch_SimpleVoice();
         patch_SimpleVoice_MZ();
         patch_PictureVariableSetting();
@@ -4553,7 +4849,9 @@
         patch_Chronus();
         patch_MKR_PlayerSensor();
         patch_MakeScreenCapture();
+        patch_MakeScreenCapture_MZ();
         patch_MessageWindowPopup();
+        patch_MessageWindowPopup_MZ();
         patch_TraceEvent();
         patch_DynamicVariables();
         patch_DynamicActorGraphic();
@@ -4612,6 +4910,7 @@
         patch_GameStartEval();
         patch_CustomizeConfigItem();
         patch_MenuSubCommand();
+        patch_MenuSubCommand_MZ();
         patch_DynamicBattlerParam();
         patch_ParamTransfer();
         patch_ParamTransfer_MZ();
@@ -4646,6 +4945,7 @@
         patch_TemplateEvent();
         patch_DescriptionExtend();
         patch_ProfileExtend();
+        patch_AttackChain();
     };
     //#endregion
 
