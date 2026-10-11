@@ -3634,7 +3634,9 @@
     //EventReSpawn.js
     //1.12.5
     //MV
+    //MZ discarding
     function patch_EventReSpawn() {
+        if (Utils.RPGMAKER_NAME !== 'MV') return;
         const interpreter = Game_Interpreter.prototype;
         const map = Game_Map.prototype;
 
@@ -4776,6 +4778,59 @@
         Sprite_ChainCount._jtAttackChainPatched = true;
     }
 
+    //TitleNewGameOnly.js
+    //2.3.2
+    //MZ
+    //not likely but SANELY possible to use \N[n] in filename ig
+    function patch_TitleNewGameOnly() {
+        if (typeof Scene_Title.prototype.createGameStartSprite !== 'function' ||
+            Scene_Title._jtTitleNewGameOnlyPatched
+        ) return;
+        const _createGSS = Scene_Title.prototype.createGameStartSprite;
+        Scene_Title.prototype.createGameStartSprite = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _createGSS.apply(this, arguments);
+            })
+        };
+        Scene_Title._jtTitleNewGameOnlyPatched = true;
+    }
+
+    //CommonWithParameter.js
+    //1.4.1
+    //MZ
+    //together w/ MessageCommon.js, \CEP[eventNameString, param] is SANELY legit.
+    function patch_CommonWithParameter(){
+        const proto = Window_Message.prototype;
+        if(Utils.RPGMAKER_NAME!=='MZ'||
+            typeof proto.callMessageCommon!=='function'||
+            typeof DataManager.setupCommonParameter!=='function'||
+            Window_Message._jtCommonWithParameterPatched
+        ) return;
+        const _CEC=proto.convertEscapeCharacters;
+        function _containCEP(text){
+            if(typeof text!=='string') return false;
+            const re = /(\\+|\x1b)CEP\[/gi;
+            let match;
+            while((match=re.exec(text))){
+                if(match[1]==='\x1b'||match[1].length%2===1){
+                    return true;
+                }
+            };
+            return false;
+        };
+        proto.convertEscapeCharacters=function(text){
+            if(!_containCEP(text)){
+                return _CEC.apply(this,arguments);
+            };
+            return TranslationManager.fetchRawData(()=>{
+                return TranslationManager.disablePluginTrans(()=>{
+                    return _CEC.apply(this,arguments);
+                })
+            })
+        };
+        Window_Message._jtCommonWithParameterPatched=true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -4812,6 +4867,31 @@
     //1.1.0
     //MZ
     //might miss some trans
+
+    //CommandSkill.js
+    //1.5.0
+    //MZ
+    //nobody d read \N[n] in condition logic
+
+    //GameClearFlag.js
+    //1.0.0
+    //MZ
+    //same as above
+
+    //StartUpFullScreen.js
+    //1.7.0
+    //MZ
+    //same
+
+    //CustomizeErrorScreen.js
+    //discard
+
+    //MenuBarAddition.js
+    //window title command, discard
+
+    //TextScriptBaseScript.js related Triacontane extension
+    //MZ
+    //on hold
 
     //#endregion
 
@@ -4946,6 +5026,8 @@
         patch_DescriptionExtend();
         patch_ProfileExtend();
         patch_AttackChain();
+        patch_TitleNewGameOnly();
+        patch_CommonWithParameter();
     };
     //#endregion
 
