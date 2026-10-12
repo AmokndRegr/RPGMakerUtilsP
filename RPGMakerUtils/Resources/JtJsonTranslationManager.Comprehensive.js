@@ -1,8 +1,9 @@
 /*:
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
- * @version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.1.10.0 triacontane plugins primary support
+ * @upstream version 2.3.4 Comprehensive (Broader + Faster)
+ * @patch ver 0.2.5.2 munokura MZ plugins primary support
+ *        ver 0.1.10.0 triacontane plugins primary support
  *
  * @help
  * This plugin loads a 'translations.json' file from the 'www' folder and uses it to translate various text strings in the game.
@@ -4826,6 +4827,56 @@
         Window_Message._jtCommonWithParameterPatched = true;
     }
 
+    //MNKR_HzRandomListMZ.js
+    //0.0.1
+    //MZ
+    function patch_MNKR_HzRandomListMZ() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Game_System.prototype.putHzRandomList !== 'function' ||
+            Game_System.MNKR_HzRandomListMZPatched
+        ) return;
+        const cmds = PluginManager._commands;
+        const pluginName = 'MNKR_HzRandomListMZ';
+        const cmdNames = [
+            'hzrandomCreate',
+            'hzrandomNext',
+            'hzrandomShuffle'
+        ];
+        const cmdKeys = cmdNames.map(function (cmdName) {
+            return pluginName + ':' + cmdName;
+        });
+        cmdKeys.forEach(function (key) {
+            if (typeof cmds[key] !== 'function') return;
+            const ori = cmds[key];
+            cmds[key] = function () {
+                return TranslationManager.disablePluginTrans(() => {
+                    return ori.apply(this, arguments);
+                })
+            };
+        });
+        Game_System.MNKR_HzRandomListMZPatched = true;
+    }
+
+    //MNKR_RandomTreasure.js
+    //1.0.2
+    //MZ
+    //possible repeat trans
+    function patch_MNKR_RandomTreasure() {
+        const cmds = PluginManager._commands;
+        if (!cmds || PluginManager._jtMNKR_RandomTreasurePatched) return;
+        const ori = cmds['MNKR_RandomTreasure:randomTreasure'];
+        if (typeof ori !== 'function') return;
+        cmds['MNKR_RandomTreasure:randomTreasure'] = function (args) {
+            if (!args || String(args.action) !== 'get') {
+                return ori.apply(this, arguments);
+            }
+            return TranslationManager.fetchRawData(() => {
+                return ori.apply(this, arguments);
+            })
+        };
+        PluginManager._jtMNKR_RandomTreasurePatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -5023,6 +5074,8 @@
         //patch_AttackChain();
         patch_TitleNewGameOnly();
         patch_CommonWithParameter();
+        patch_MNKR_HzRandomListMZ();
+        patch_MNKR_RandomTreasure();
     };
     //#endregion
 
