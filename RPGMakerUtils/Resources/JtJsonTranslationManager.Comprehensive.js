@@ -2,6 +2,7 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @version 2.3.4 Comprehensive (Broader + Faster)
+ * @patch ver 0.1.10.0 triacontane plugins primary support
  *
  * @help
  * This plugin loads a 'translations.json' file from the 'www' folder and uses it to translate various text strings in the game.
@@ -1697,6 +1698,7 @@
     //PictureAnimation.js
     //1.1.3
     //MZ
+    //abondoned
     function patch_PictureAnimation_MZ() {
         if (Utils.RPGMAKER_NAME !== "MZ") return;
         const proto = Game_Picture.prototype;
@@ -1762,6 +1764,7 @@
     //SimpleVoice.js
     //2.0.5
     //MZ
+    //using \N[n] in filename is reasonable, maybe =.=
     function patch_SimpleVoice_MZ() {
         if (Utils.RPGMAKER_NAME !== "MZ" ||
             PluginManager._jtSimpleVoiceMZPatched
@@ -1924,7 +1927,7 @@
     //SelfSwitchTemporary.js
     //2.0.1
     //MV
-    //No trans needed anyway
+    //No trans needed anyway, but not necessary in average sequence as well
     function patch_SelfSwitchTemporary() {
         if (typeof Game_SelfSwitches.prototype.appendTemporary !== 'function' ||
             typeof Game_SelfSwitches.prototype.clearTemporary !== 'function' ||
@@ -2108,7 +2111,7 @@
                 const source = storage.signature;
                 const template = TranslationManager.translate(source);
                 const expanded = TranslationManager.enableValueTrans(() => {
-                    PluginManagerEx.convertVariables(template);
+                    return PluginManagerEx.convertVariables(template);
                 });
                 return template === source ? TranslationManager.translate(expanded) : expanded;
             })
@@ -2279,18 +2282,17 @@
     //DynamicActorGraphic.js
     //1.2.3
     //MV
+    //filename w\ \N[n] possibility, not complex anyway
     function patch_DynamicActorGraphic() {
         if (typeof Game_Actor.prototype.refreshCustomGraphic !== 'function' ||
             Game_Actor._jtDynamicActorGraphicPatched
         ) return;
-
         const _refresh = Game_Actor.prototype.refreshCustomGraphic;
         Game_Actor.prototype.refreshCustomGraphic = function () {
             return TranslationManager.fetchRawData(() => {
                 return _refresh.call(this);
             })
         }
-
         Game_Actor._jtDynamicActorGraphicPatched = true;
     }
 
@@ -2364,6 +2366,7 @@
     //MoviePicture.js
     //2.3.1
     //MZ
+    //similar filename by \N[n]
     function patch_MoviePicture_MZ() {
         if (typeof Game_Picture.prototype.showVideo !== 'function' ||
             typeof Game_Enemy.prototype.updateVideoName !== 'function' ||
@@ -2648,18 +2651,16 @@
     //SceneNumberInput.js
     //1.2.1
     //MV
+    //rlly worthwhile filtering numbers off trans entrance?
     function patch_SceneNumberInput() {
         if (typeof Game_Interpreter.prototype.callNumberInput !== 'function' ||
             Game_Interpreter._jtSceneNumberInputPatched
         ) return;
-
         const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
-
         const SNICommands = new Set([
             'SNI_CALL_NUMBER_INPUT', 'SNI_数値入力画面の呼び出し',
             'SNI_SET_NUMBER_INPUT_HELP', 'SNI_ヘルプ説明設定'
         ]);
-
         Game_Interpreter.prototype.pluginCommand = function (command, args) {
             if (SNICommands.has(String(command).toUpperCase())) {
                 return TranslationManager.disablePluginTrans(() => {
@@ -2668,27 +2669,24 @@
             }
             _pluginCommand.call(this, command, args);
         }
-
         Game_Interpreter._jtSceneNumberInputPatched = true;
     }
 
     //ScreenRotation.js
     //1.0.0
     //MV
+    //rlly worthwhile filtering numbers off trans entrance?
     function patch_ScreenRotation() {
         if (typeof Game_Interpreter.prototype.execStartRotation !== 'function' ||
             Game_Interpreter._jtScreenRotationPatched
         ) return;
-
         const _pluginCommand = Game_Interpreter.prototype.pluginCommand;
-
         const SRCommands = new Set([
             'SR_回転開始', 'SR_START_ROTATION',
             'SR_回転停止', 'SR_STOP_ROTATION',
             'SR_回転リセット', 'SR_RESET_ROTATION',
             'SR_ズーム開始', 'SR_START_ZOOM'
         ]);
-
         Game_Interpreter.prototype.pluginCommand = function (command, args) {
             if (SRCommands.has(String(command).toUpperCase())) {
                 return TranslationManager.disablePluginTrans(() => {
@@ -2697,7 +2695,6 @@
             }
             _pluginCommand.call(this, command, args);
         }
-
         Game_Interpreter._jtScreenRotationPatched = true;
     }
 
@@ -3463,7 +3460,6 @@
         if (typeof Game_Interpreter.prototype.pluginCommandCharacterPictureManager !== 'function' ||
             Game_Interpreter._jtCharacterPictureManagerPatched
         ) return;
-
         const wrap = function (fn) {
             return function () {
                 return TranslationManager.fetchRawData(() => {
@@ -3473,7 +3469,6 @@
                 });
             };
         };
-
         Game_Interpreter.prototype.pluginCommandCharacterPictureManager = wrap(Game_Interpreter.prototype.pluginCommandCharacterPictureManager);
         if (typeof Game_Battler.prototype.getPictureName === 'function') {
             Game_Battler.prototype.getPictureName = wrap(Game_Battler.prototype.getPictureName);
@@ -3484,13 +3479,12 @@
         if (typeof Game_Battler.prototype.getCpY === 'function') {
             Game_Battler.prototype.getCpY = wrap(Game_Battler.prototype.getCpY);
         }
-        if (typeof Game_Battler.prototype.getPictureName === 'function') {
-            Game_Battler.prototype.getPictureName = wrap(Game_Battler.prototype.getPictureName);
+        if (typeof Game_Actor.prototype.getCgName === 'function') {
+            Game_Actor.prototype.getCgName = wrap(Game_Actor.prototype.getCgName);
         }
         if (typeof Game_Item.prototype.getMaxEndurance === 'function') {
             Game_Item.prototype.getMaxEndurance = wrap(Game_Item.prototype.getMaxEndurance);
         }
-
         Game_Interpreter._jtCharacterPictureManagerPatched = true;
     }
 
@@ -3509,8 +3503,8 @@
                 return TranslationManager.disablePluginTrans(() => {
                     const result = _updateSP.apply(this, args);
                     const actor = args[0];
-                    const sprite = actor && this._standSprites?.get(actor.actorId());
-                    const pictureParam = sprite?._pictures;
+                    const sprite = actor && this._standSprites && this._standSprites.get(actor.actorId());
+                    const pictureParam = sprite && sprite._pictures;
                     const paramProto = pictureParam && Object.getPrototypeOf(pictureParam);
                     if (paramProto &&
                         !patchedPrototypes.has(paramProto) &&
@@ -3902,7 +3896,7 @@
             return TranslationManager.fetchRawData(() => {
                 const result = _createC.apply(this, arguments);
                 const key = commands.ParentName + commands.CommandId;
-                const items = this._menuParentCommands?.get(key);
+                const items = this._menuParentCommands && this._menuParentCommands.get(key);
                 const instance = items && items[items.length - 1];
                 if (instance) {
                     const proto = Object.getPrototypeOf(instance);
@@ -3972,6 +3966,7 @@
     //DynamicBattlerParam.js
     //2.0.2
     //MV
+    //not heavy so leave as is?
     function patch_DynamicBattlerParam() {
         const proto = Game_BattlerBase.prototype;
         if (typeof proto.getDynamicParam !== 'function' ||
@@ -4799,36 +4794,36 @@
     //1.4.1
     //MZ
     //together w/ MessageCommon.js, \CEP[eventNameString, param] is SANELY legit.
-    function patch_CommonWithParameter(){
+    function patch_CommonWithParameter() {
         const proto = Window_Message.prototype;
-        if(Utils.RPGMAKER_NAME!=='MZ'||
-            typeof proto.callMessageCommon!=='function'||
-            typeof DataManager.setupCommonParameter!=='function'||
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof proto.callMessageCommon !== 'function' ||
+            typeof DataManager.setupCommonParameter !== 'function' ||
             Window_Message._jtCommonWithParameterPatched
         ) return;
-        const _CEC=proto.convertEscapeCharacters;
-        function _containCEP(text){
-            if(typeof text!=='string') return false;
+        const _CEC = proto.convertEscapeCharacters;
+        function _containCEP(text) {
+            if (typeof text !== 'string') return false;
             const re = /(\\+|\x1b)CEP\[/gi;
             let match;
-            while((match=re.exec(text))){
-                if(match[1]==='\x1b'||match[1].length%2===1){
+            while ((match = re.exec(text))) {
+                if (match[1] === '\x1b' || match[1].length % 2 === 1) {
                     return true;
                 }
             };
             return false;
         };
-        proto.convertEscapeCharacters=function(text){
-            if(!_containCEP(text)){
-                return _CEC.apply(this,arguments);
+        proto.convertEscapeCharacters = function (text) {
+            if (!_containCEP(text)) {
+                return _CEC.apply(this, arguments);
             };
-            return TranslationManager.fetchRawData(()=>{
-                return TranslationManager.disablePluginTrans(()=>{
-                    return _CEC.apply(this,arguments);
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _CEC.apply(this, arguments);
                 })
             })
         };
-        Window_Message._jtCommonWithParameterPatched=true;
+        Window_Message._jtCommonWithParameterPatched = true;
     }
 
     //DestinationWindow.js
@@ -4916,7 +4911,7 @@
         patch_TorigoyaMZ_NotifyMessage_AddonGetItem();
         patch_TorigoyaMZ_NotifyMessage();
         patch_PictureAnimation();
-        patch_PictureAnimation_MZ();
+        //patch_PictureAnimation_MZ();
         patch_SimpleVoice();
         patch_SimpleVoice_MZ();
         patch_PictureVariableSetting();
@@ -4991,10 +4986,10 @@
         patch_CustomizeConfigItem();
         patch_MenuSubCommand();
         patch_MenuSubCommand_MZ();
-        patch_DynamicBattlerParam();
-        patch_ParamTransfer();
-        patch_ParamTransfer_MZ();
-        patch_TraitConditions();
+        //patch_DynamicBattlerParam();
+        //patch_ParamTransfer();
+        //patch_ParamTransfer_MZ();
+        //patch_TraitConditions();
         patch_NpcFollower();
         patch_CharacterPopupDamage();
         patch_MovieManager();
@@ -5011,8 +5006,8 @@
         patch_ChargeTimeControl();
         patch_ConditionalXparam();
         patch_DamageSeEffective();
-        patch_EncounterFormula();
-        patch_EnemyOverlay();
+        //patch_EncounterFormula();
+        //patch_EnemyOverlay();
         patch_ExtraGauge();
         patch_ItemStealAction();
         patch_PartyCommandScene();
@@ -5023,9 +5018,9 @@
         patch_StateTrigger();
         patch_TitleCall();
         patch_TemplateEvent();
-        patch_DescriptionExtend();
-        patch_ProfileExtend();
-        patch_AttackChain();
+        //patch_DescriptionExtend();
+        //patch_ProfileExtend();
+        //patch_AttackChain();
         patch_TitleNewGameOnly();
         patch_CommonWithParameter();
     };
