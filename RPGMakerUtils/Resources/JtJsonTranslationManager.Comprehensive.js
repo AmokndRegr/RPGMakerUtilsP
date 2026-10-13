@@ -2,7 +2,7 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.2.5.2 munokura MZ plugins primary support
+ * @patch ver 0.2.10.5 munokura plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
  *
  * @help
@@ -4877,6 +4877,81 @@
         PluginManager._jtMNKR_RandomTreasurePatched = true;
     }
 
+    //MNKR_RandomActorNameMV.js
+    //0.0.2
+    //MV
+    //random names might not have trans tho
+    function patch_MNKR_RandomActorNameMV() {
+        const pluginName = 'MNKR_RandomActorNameMV';
+        const params = PluginManager.parameters(pluginName);
+        if (!Object.prototype.hasOwnProperty.call(params, 'nameLists') ||
+            PluginManager._jtMNKR_RandomActorNameMVPatched
+        ) return;
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (command !== pluginName) {
+                return _pluginC.apply(this, arguments);
+            }
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _pluginC.apply(this, arguments);
+                })
+            });
+        }
+        PluginManager._jtMNKR_RandomActorNameMVPatched = true;
+    }
+
+    //MNKR_MessageAlignCenterMV.js
+    //0.1.0
+    //MV
+    //trans re entry related
+    function patch_MNKR_MessageAlignCenterMV() {
+        if (
+            !$plugins.some(plugin => plugin.status && plugin.name === 'MNKR_MessageAlignCenterMV') ||
+            typeof Window_Base.createDummyWindow !== 'function' ||
+            Window_Base._jtMNKR_MessageAlignCenterMVPatched
+        ) return;
+        const patchedPrototypes = new WeakSet();
+        const _createDW = Window_Base.createDummyWindow;
+        Window_Base.createDummyWindow = function () {
+            const dummy = _createDW.apply(this, arguments);
+            const proto = dummy && Object.getPrototypeOf(dummy);
+            if (proto &&
+                !patchedPrototypes.has(proto) &&
+                Object.prototype.hasOwnProperty.call(proto, 'textSizeEx') &&
+                typeof proto.textSizeEx === 'function'
+            ) {
+                const _textSE = proto.textSizeEx;
+                proto.textSizeEx = function () {
+                    return TranslationManager.disablePluginTrans(() => {
+                        _textSE.apply(this, arguments);
+                    })
+                };
+            };
+            return dummy;
+        };
+        Window_Base._jtMNKR_MessageAlignCenterMVPatched = true;
+    }
+
+    //MNKR_EnemyIcon.js
+    //1.1.0
+    //MV
+    //append smth after translated string hence breaking cache
+    function patch_MNKR_EnemyIcon() {
+        if (!$plugins.some(plugin => plugin.status && plugin.name === 'MNKR_EnemyIcon') ||
+            Window_BattleEnemy._jtMNKR_EnemyIconPatched
+        ) return;
+        const _drawI = Window_BattleEnemy.prototype.drawItem;
+        Window_BattleEnemy.prototype.drawItem = function () {
+            return TranslationManager.fetchTranslatedData(() => {
+                return TranslationManager.skipPluginTrans(() => {
+                    return _drawI.apply(this, arguments);
+                })
+            })
+        };
+        Window_BattleEnemy._jtMNKR_EnemyIconPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -5076,6 +5151,9 @@
         patch_CommonWithParameter();
         patch_MNKR_HzRandomListMZ();
         patch_MNKR_RandomTreasure();
+        patch_MNKR_RandomActorNameMV();
+        patch_MNKR_MessageAlignCenterMV();
+        patch_MNKR_EnemyIcon();
     };
     //#endregion
 
