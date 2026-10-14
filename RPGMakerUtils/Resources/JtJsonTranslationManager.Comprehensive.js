@@ -171,13 +171,13 @@
     };
     //using [) settings
 
-    TranslationManager.getIndex = function (rawText, subString) {
+    TranslationManager.getIndex = function (rawText, subString, overlapping = false) {
         // assume its in text
         const positions = [];
         let pos = 0;
         while ((pos = rawText.indexOf(subString, pos)) !== -1) {
             positions.push(pos);
-            pos += subString.length;
+            pos += overlapping ? 1 : subString.length;
         }
         return positions;
     };
@@ -552,8 +552,40 @@
         });
     }
 
-    TranslationManager.translate = function (text, detectStartWhitespace = true, times = Number.POSITIVE_INFINITY, cache = true) {
-        if (typeof text !== 'string' || !this._dict || this._translatedSet.has(text)) {
+    function normalizeMask(mask, textLength) {
+        if (mask == null) return;
+        if (!Array.isArray(mask)) return;
+        const ranges = [];
+        for (const range of mask) {
+            const start = range[0];
+            const end = range[1];
+            if (start < 0 || end < start || end > textLength) continue;
+            if (start !== end) ranges.push([start, end]);
+        }
+        ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+        const merged = [];
+        for (const range of ranges) {
+            const last = merged[merged.length - 1];
+            if (last && range[0] <= last[1]) {
+                last[1] = Math.max(last[1], range[1]);
+            }
+            else {
+                merged.push(range);
+            }
+        }
+        return merged;
+    }
+
+    TranslationManager.translate = function (text, detectStartWhitespace = true, times = Number.POSITIVE_INFINITY, cache = true, mask = null) {
+        if (typeof text !== 'string' || !this._dict) {
+            return text;
+        }
+        const ranges = normalizeMask(mask, text.length);
+        const hasMask = ranges.length > 0;
+        if (this._translatedSet.has(text)) {
+            if (hasMask) {
+                this._pushRecent(text); //needs verification ig
+            }
             return text;
         }
 
@@ -563,20 +595,20 @@
         }
 
         // If text can be directly translated, do it
-        if (this._dict[text]) {
+        if (!hasMask && this._dict[text]) {
             this._pushRecent(this._dict[text]);
             return this._dict[text];
         }
 
         // If has linebreaks, translate each line separately
-        if (text.includes('\n')) {
+        if (!hasMask && text.includes('\n')) {
             const lines = text.split('\n');
             const translatedLines = lines.map(line => this.translate(line, detectStartWhitespace, times));
             return translatedLines.join('\n');
         }
 
-        let leadingSpaces = null
-        if (detectStartWhitespace) {
+        let leadingSpaces = '';
+        if (!hasMask && detectStartWhitespace) {
             const match = text.match(/^\s+/);
             leadingSpaces = match ? match[0] : '';
             text = text.slice(leadingSpaces.length);
@@ -586,7 +618,7 @@
             // tbf im not sure abt this
             return detectStartWhitespace ? leadingSpaces + text : text;
         }
-        if (this._dict[text]) {
+        if (!hasMask && this._dict[text]) {
             this._pushRecent(this._dict[text]);
             return detectStartWhitespace ? leadingSpaces + this._dict[text] : this._dict[text];
         }
@@ -602,28 +634,37 @@
 
             //occupied char record
             const occupied = new Array(textLength).fill(false);
+            function occupy(start, end) {
+                for (let index = start; index < end; index++) {
+                    if (!occupied[index]) {
+                        occupied[index] = true;
+                        freeCount--;
+                    }
+                }
+            }
+            for (const range of ranges) {
+                occupy(range[0], range[1]);
+            }
 
             //DynamicTemplate keys preservation
             if (this._descriptionTemplateTransDepth > 0) {
                 const placeholders = /\$\{(.*?)}/g;
                 let placeholder;
                 while ((placeholder = placeholders.exec(text))) {
-                    for (let index = placeholder.index; index < placeholders.lastIndex; index++) {
-                        occupied[index] = true;
-                        freeCount--;
-                    }
+                    occupy(placeholder.index, placeholders.lastIndex);
                 }
             }
 
             const result_intervals = [];
             // Go through all possible length buckets
             outer: for (let len of lenSorted) {
+                if (freeCount === 0) break outer;
                 for (let key of this._lengthKeyDict[len]) {
                     if (!len) {
                         break outer
                     }
                     // dict containing "":"" mapping
-                    const positions = TranslationManager.getIndex(translatedText, key);
+                    const positions = TranslationManager.getIndex(translatedText, key, hasMask);
                     if (positions.length > 0) {
                         for (const start of positions) {
                             const end = start + len;
@@ -633,10 +674,7 @@
                                     end,
                                     replacement: this._dict[key]
                                 });
-                                for (let i = start; i < end; i++) {
-                                    occupied[i] = 1;
-                                };
-                                freeCount -= len;
+                                occupy(start, end);
                             }
                             if (freeCount === 0) {
                                 break outer;
@@ -665,7 +703,9 @@
                 if (!this._lengthKeyDict[text.length]) {
                     this._lengthKeyDict[text.length] = [];
                 }
-                this._lengthKeyDict[text.length].push(text);
+                if (!hasMask || !this._lengthKeyDict[text.length].includes(text)) {
+                    this._lengthKeyDict[text.length].push(text);
+                }
                 this._translatedSet.add(translatedText);
                 translatedText = detectStartWhitespace ? leadingSpaces + translatedText : translatedText;
                 this._pushRecent(translatedText);
@@ -2044,14 +2084,12 @@
     function patch_MKR_PlayerSensor() {
         if (typeof Game_Event.prototype.isFoundPlayer !== "function") return;
         if (Game_Event._jtMKR_PlayerSensorPatched) return;
-
         const _isFoundPlayer = Game_Event.prototype.isFoundPlayer;
         Game_Event.prototype.isFoundPlayer = function () {
             return TranslationManager.disablePluginTrans(() => {
-                return _isFoundPlayer();
+                return _isFoundPlayer.apply(this, arguments);
             })
         }
-
         Game_Event._jtMKR_PlayerSensorPatched = true;
     }
 
@@ -4952,6 +4990,181 @@
         Window_BattleEnemy._jtMNKR_EnemyIconPatched = true;
     }
 
+    TranslationManager._mkrControlProtectionDepth = 0;
+    TranslationManager.withMkrControlProtection = function (callback) {
+        this._mkrControlProtectionDepth++;
+        try {
+            return callback();
+        } finally {
+            this._mkrControlProtectionDepth--;
+        }
+    };
+    const _mkrRegisteredDict = new WeakSet();
+
+    function mkrHasOwn(object, key) {
+        return Object.prototype.hasOwnProperty.call(object, key);
+    };
+
+    //Try Syntax conversion w/o expanding variables
+    function toMkrEscapeForm(text) {
+        return text.replace(/\\/g, "\x1b").replace(/\x1b\x1b/g, "\\");
+    };
+
+    //Return ordered, non overlapping [) intervals
+    function scanMkrControlBlocks(text) {
+        const blocks = [];
+        for (let i = 0; i < text.length;) {
+            const prefix = text[i];
+            if (prefix !== '\\' && prefix !== '\x1b') {
+                i++;
+                continue;
+            }
+            if (text[i + 1] === prefix) {
+                i += 2;
+                continue;
+            }
+            const type = text.slice(i + 1, i + 3).toUpperCase();
+            if ((type !== 'SE' && type !== 'ME' && type !== 'IM') ||
+                text[i + 3] !== '['
+            ) {
+                i++;
+                continue;
+            }
+            let depth = 1;
+            let end = i + 4;
+            for (; end < text.length; end++) {
+                if (text[end] === '[') {
+                    depth++
+                } else if (text[end] === ']') {
+                    depth--;
+                    if (depth === 0) break;
+                }
+            }
+            if (depth !== 0) {
+                return { blocks, complete: false };
+            }
+            end++;
+            blocks.push({ start: i, end, type, raw: text.slice(i, end) });
+            i = end;
+        }
+        return { blocks, complete: true };
+    }
+
+    function splitMkrControlText(text, blocks) {
+        const parts = [];
+        let cursor = 0;
+        for (const block of blocks) {
+            parts.push(text.slice(cursor, block.start));
+            cursor = block.end;
+        }
+        parts.push(text.slice(cursor));
+        return parts;
+    }
+
+    function sameMkrControlBlock(source, target) {
+        return source.type === target.type
+        //&& toMkrEscapeForm(source.raw.slice(3)) === toMkrEscapeForm(target.raw.slice(3));
+        //don require content consistency in \SE[content] trans dic
+    }
+
+    function _registerMKRControlCharacterTrans() {
+        if (!TranslationManager._dict ||
+            !TranslationManager._lengthKeyDict ||
+            _mkrRegisteredDict.has(TranslationManager._dict)
+        ) return;
+        //wont visit entries added by this registration
+        const entries = Object.entries(TranslationManager._dict);
+        const KnowTargets = new Set(
+            entries.map(entry => entry[1])
+        );
+        function addTrans(source, target) {
+            if (!source ||
+                !target ||
+                mkrHasOwn(TranslationManager._dict, source)
+            ) return;
+            TranslationManager._dict[source] = target;
+            const bucket = TranslationManager._lengthKeyDict[source.length] || (TranslationManager._lengthKeyDict[source.length] = []);
+            if (!bucket.includes(source)) {
+                bucket.push(source);
+            };
+            KnowTargets.add(target);
+            TranslationManager._translatedSet.add(target);
+            if (!KnowTargets.has(source)) {
+                TranslationManager._translatedSet.delete(source);
+            }
+        }
+        for (const [source, target] of entries) {
+            if (typeof target !== 'string') continue;
+            const sourceScan = scanMkrControlBlocks(source);
+            const targetScan = scanMkrControlBlocks(target);
+            const sourceBlocks = sourceScan.blocks;
+            const targetBlocks = targetScan.blocks;
+            if (
+                !sourceScan.complete ||
+                !targetScan.complete ||
+                sourceBlocks.length === 0 ||
+                sourceBlocks.length !== targetBlocks.length ||
+                !sourceBlocks.every((block, i) => sameMkrControlBlock(block, targetBlocks[i]))
+            ) continue;
+            const sourceParts = splitMkrControlText(source, sourceBlocks);
+            const targetParts = splitMkrControlText(target, targetBlocks);
+            for (let i = 0; i < sourceParts.length; i++) {
+                addTrans(sourceParts[i], targetParts[i]);
+                addTrans(toMkrEscapeForm(sourceParts[i]), toMkrEscapeForm(targetParts[i]));
+            }
+        }
+        _mkrRegisteredDict.add(TranslationManager._dict);
+    }
+
+    //MKR_ControlCharacterEx.js
+    //1.2.1
+    //MV
+    function patch_MKR_ControlCharacterEx() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            !$plugins.some(plugin => plugin.status && plugin.name === 'MKR_ControlCharacterEx') ||
+            Window_Base._jtMKR_ControlCharacterExPatched
+        ) return;
+        _registerMKRControlCharacterTrans();
+        const _translate = TranslationManager.translate;
+        TranslationManager.translate = function (text, detectStartWhitespace = true, times = Number.POSITIVE_INFINITY, cache = true, mask = null) {
+            if (this._mkrControlProtectionDepth > 0 && typeof text === 'string') {
+                //Every wrapper adds masks for this same input before translation.
+                const ownMask = scanMkrControlBlocks(text).blocks.map(block => [block.start, block.end]);
+                if (ownMask.length > 0) {
+                    const args = Array.prototype.slice.call(arguments);
+                    args[4] = (mask == null ? [] : mask).concat(ownMask);
+                    return _translate.apply(this, args);
+                }
+            }
+            return _translate.apply(this, arguments);
+        }
+
+        const _convertEC = Window_Base.prototype.convertEscapeCharacters;
+        Window_Base.prototype.convertEscapeCharacters = function (text) {
+            if (
+                typeof text !== 'string' ||
+                TranslationManager._translatedSkipDepth > 0 ||
+                TranslationManager._translationDisableDepth > 0
+            ) {
+                return _convertEC.apply(this, arguments);
+            }
+            const { blocks } = scanMkrControlBlocks(text);
+            if (blocks.length === 0) {
+                return _convertEC.apply(this, arguments);
+            }
+            const result = TranslationManager.withMkrControlProtection(() => {
+                return _convertEC.apply(this, arguments);
+            });
+            if (!TranslationManager.isRawData() && typeof result === 'string') {
+                TranslationManager.pushConvertedText(result);
+                TranslationManager._pushRecent(result);
+            }
+            return result;
+        }
+        Window_Base._jtMKR_ControlCharacterExPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -5154,6 +5367,7 @@
         patch_MNKR_RandomActorNameMV();
         patch_MNKR_MessageAlignCenterMV();
         patch_MNKR_EnemyIcon();
+        patch_MKR_ControlCharacterEx();
     };
     //#endregion
 
