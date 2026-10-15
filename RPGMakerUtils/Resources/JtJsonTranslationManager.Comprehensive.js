@@ -2,7 +2,7 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.4.05.1 MOG MV plugins support
+ * @patch ver 0.4.05.2 MOG MV plugins support
  *        ver 0.3.10.2 MKR plugins primary support
  *        ver 0.2.10.5 munokura plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
@@ -5224,6 +5224,53 @@
         Scene_Menu._jtMOG_SceneMenuPatched = true;
     }
 
+    //MOG_BattleCommands.js
+    //1.3
+    //MV
+    function patch_MOG_BattleCommands() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            !$plugins.some(plugin => plugin.status && plugin.name === 'MOG_BattleCommands') ||
+            typeof Window_ActorCommand.prototype.com_pic_initialize !== 'function' ||
+            Window_ActorCommand._jtMOG_BattleCommandsPatched
+        ) return;
+        TranslationManager._MOG_BattleCommandsDepth = 0;
+        const patchedInstances = new WeakSet();
+        const _createACW = Scene_Battle.prototype.createActorCommandWindow;
+        Scene_Battle.prototype.createActorCommandWindow = function () {
+            TranslationManager._MOG_BattleCommandsDepth++;
+            try {
+                return _createACW.apply(this, arguments);
+            } finally {
+                TranslationManager._MOG_BattleCommandsDepth--;
+            }
+        };
+        const _initialize = Window_ActorCommand.prototype.initialize;
+        Window_ActorCommand.prototype.initialize = function () {
+            if (TranslationManager._MOG_BattleCommandsDepth > 0 &&
+                !patchedInstances.has(this) &&
+                typeof this.makeCommandList === 'function'
+            ) {
+                const _makeCL = this.makeCommandList;
+                Object.defineProperty(this, 'makeCommandList', {
+                    configurable: true,
+                    writable: true,
+                    enumerable: false,
+                    value: function () {
+                        return TranslationManager.fetchRawData(() => {
+                            return TranslationManager.disablePluginTrans(() => {
+                                return _makeCL.apply(this, arguments);
+                            })
+                        })
+                    }
+                });
+                patchedInstances.add(this);
+            }
+            return _initialize.apply(this, arguments);
+        }
+        Window_ActorCommand._jtMOG_BattleCommandsPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -5432,6 +5479,7 @@
         patch_MNKR_EnemyIcon();
         patch_MKR_ControlCharacterEx();
         patch_MOG_SceneMenu();
+        patch_MOG_BattleCommands();
     };
     //#endregion
 
