@@ -2,7 +2,7 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.4.05.2 MOG MV plugins support
+ * @patch ver 0.4.05.3 MOG MV plugins support
  *        ver 0.3.10.2 MKR plugins primary support
  *        ver 0.2.10.5 munokura plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
@@ -5271,6 +5271,41 @@
         Window_ActorCommand._jtMOG_BattleCommandsPatched = true;
     }
 
+    //MOG_AnimatedText.js
+    //1.3
+    //MV
+    function patch_MOG_AnimatedText() {
+        if (Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof InfoText === 'undefined' ||
+            typeof InfoText.prototype.text !== 'function' ||
+            typeof InfoText.prototype.refreshText !== 'function' ||
+            typeof InfoText.prototype.loadInfoData !== 'function' ||
+            InfoText._jtMOG_AnimatedTextPatched
+        ) return;
+        const _text = InfoText.prototype.text;
+        const _refreshT = InfoText.prototype.refreshText;
+        const _loadID = InfoText.prototype.loadInfoData;
+        InfoText.prototype.text = function () {
+            const source = _text.apply(this, arguments);
+            return typeof source === 'string' ? TranslationManager.translate(source) : source;
+        }
+        InfoText.prototype.refreshText = function () {
+            return TranslationManager.skipPluginTrans(() => {
+                return _refreshT.apply(this, arguments);
+            })
+        }
+        InfoText.prototype.loadInfoData = function () {
+            const data = this.data();
+            const saved = data && data[7];
+            if (Array.isArray(saved) && Array.isArray(this._letters) && saved.length !== this._letters.length) {
+                data[7] = null;
+                return;
+            }
+            return _loadID.apply(this, arguments);
+        }
+        InfoText._jtMOG_AnimatedTextPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -5480,6 +5515,7 @@
         patch_MKR_ControlCharacterEx();
         patch_MOG_SceneMenu();
         patch_MOG_BattleCommands();
+        patch_MOG_AnimatedText();
     };
     //#endregion
 
