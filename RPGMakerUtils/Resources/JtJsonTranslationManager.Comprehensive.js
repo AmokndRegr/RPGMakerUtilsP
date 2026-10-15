@@ -2,7 +2,7 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.4.05.3 MOG MV plugins support
+ * @patch ver 0.4.05.7 MOG MV plugins support
  *        ver 0.3.10.2 MKR plugins primary support
  *        ver 0.2.10.5 munokura plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
@@ -5306,6 +5306,105 @@
         InfoText._jtMOG_AnimatedTextPatched = true;
     }
 
+    //MOG_TimeSystem.js
+    //1.6
+    //MV
+    function patch_MOG_TimeSystem() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Window_Time_Status === 'undefined' ||
+            typeof Moghunter === 'undefined' ||
+            Window_Time_Status._jtMOG_TimeSystemPatched
+        ) return;
+        const fields = [
+            "time_word",
+            "day_word",
+            "day_week_word",
+            "month_word",
+            "season_word",
+            "year_word",
+            "play_time_word"
+        ];
+        fields.forEach(function (key) {
+            if (Moghunter[key] instanceof String) {
+                Moghunter[key] = String(Moghunter[key]);
+            }
+        })
+        Window_Time_Status._jtMOG_TimeSystemPatched = true;
+    }
+
+    //MOG_Music_Book.js
+    //1.5
+    //MV
+    //mirroring setText_rv, might be version dependent
+    function patch_MOG_Music_Book() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Window_Help.prototype.setText_rv !== 'function' ||
+            Window_Help._jtMOG_Music_BookPatched
+        ) return;
+        Window_Help.prototype.setText_rv = function (text) {
+            if (this._text === text) return;
+            const displayText = TranslationManager.translate(text);
+            return TranslationManager.skipPluginTrans(() => {
+                const words = displayText.split(' ');
+                let text1 = '';
+                let text2 = '';
+                for (let i = 0; i < words.length; i++) {
+                    if (this.textWidth(text1 + words[i]) < this.width - 32) {
+                        text1 += words[i] + ' ';
+                    } else {
+                        text2 += words[i] + ' ';
+                    }
+                }
+                this._text = text;
+                this.contents.clear();
+                this.drawText(text1, 0, 0, this.width - 32);
+                this.drawText(text2, 0, this.lineHeight(), this.width - 32);
+            })
+        }
+        Window_Help._jtMOG_Music_BookPatched = true;
+    }
+
+    //MOG_TreasurePopup.js
+    //1.1
+    //MV
+    function patch_MOG_TreasurePopup() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof TreasureIcons === 'undefined' ||
+            TreasureIcons._jtMOG_TreasurePopupPatched
+        ) return;
+        ['setupNew', 'refreshName'].forEach(function (key) {
+            const ori = TreasureIcons.prototype[key];
+            TreasureIcons.prototype[key] = function () {
+                return TranslationManager.skipPluginTrans(() => {
+                    return ori.apply(this, arguments);
+                })
+            }
+        });
+        TreasureIcons._jtMOG_TreasurePopupPatched = true;
+    }
+
+    //MOG_TreasureHud.js
+    //1.3
+    //MV
+    function patch_MOG_TreasureHud() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Treasure_Hud === 'undefined' ||
+            typeof Treasure_Hud.prototype.refresh_name !== 'function' ||
+            Treasure_Hud._jtMOG_TreasureHudPatched
+        ) return;
+        const _refreshN = Treasure_Hud.prototype.refresh_name;
+        Treasure_Hud.prototype.refresh_name = function () {
+            return TranslationManager.skipPluginTrans(() => {
+                return _refreshN.apply(this, arguments);
+            })
+        };
+        Treasure_Hud._jtMOG_TreasureHudPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -5516,6 +5615,10 @@
         patch_MOG_SceneMenu();
         patch_MOG_BattleCommands();
         patch_MOG_AnimatedText();
+        patch_MOG_TimeSystem();
+        patch_MOG_Music_Book();
+        patch_MOG_TreasurePopup();
+        patch_MOG_TreasureHud();
     };
     //#endregion
 
