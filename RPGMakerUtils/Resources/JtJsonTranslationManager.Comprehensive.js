@@ -2,7 +2,9 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.2.10.5 munokura plugins primary support
+ * @patch ver 0.4.05.1 MOG MV plugins support
+ *        ver 0.3.10.2 MKR plugins primary support
+ *        ver 0.2.10.5 munokura plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
  *
  * @help
@@ -553,8 +555,8 @@
     }
 
     function normalizeMask(mask, textLength) {
-        if (mask == null) return;
-        if (!Array.isArray(mask)) return;
+        if (mask == null) return [];
+        if (!Array.isArray(mask)) return [];
         const ranges = [];
         for (const range of mask) {
             const start = range[0];
@@ -1060,9 +1062,18 @@
                     */
                 }
                 if ($dataSystem.terms.commands) {
+                    TranslationManager.bindDataArray($dataSystem.terms.commands);
+                    $dataSystem.terms.commands.forEach(function (_, index) {
+                        tField(
+                            $dataSystem.terms.commands,
+                            index
+                        );
+                    })
+                    /*
                     $dataSystem.terms.commands.forEach((term, i) => {
                         $dataSystem.terms.commands[i] = TranslationManager.translate(term);
                     });
+                    */
                 }
                 if ($dataSystem.terms.params) {
                     TranslationManager.bindDataArray($dataSystem.terms.params);
@@ -5119,6 +5130,7 @@
     //MKR_ControlCharacterEx.js
     //1.2.1
     //MV
+    //sliceName still not handled
     function patch_MKR_ControlCharacterEx() {
         if (
             Utils.RPGMAKER_NAME !== 'MV' ||
@@ -5163,6 +5175,53 @@
             return result;
         }
         Window_Base._jtMKR_ControlCharacterExPatched = true;
+    }
+
+    //MOG_SceneMenu.js
+    //1.2
+    //MV
+    function patch_MOG_SceneMenu() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            !$plugins.some(plugin => plugin.status && plugin.name === 'MOG_SceneMenu') ||
+            typeof Scene_Menu.prototype.loadBitmapsMain !== 'function' ||
+            Scene_Menu._jtMOG_SceneMenuPatched
+        ) return;
+        TranslationManager._MOG_SceneMenuDepth = 0;
+        const patchedInstances = new WeakSet();
+        const _createCW = Scene_Menu.prototype.createCommandWindow;
+        Scene_Menu.prototype.createCommandWindow = function () {
+            TranslationManager._MOG_SceneMenuDepth++;
+            try {
+                return _createCW.apply(this, arguments);
+            } finally {
+                TranslationManager._MOG_SceneMenuDepth--;
+            }
+        };
+        const _initialize = Window_MenuCommand.prototype.initialize;
+        Window_MenuCommand.prototype.initialize = function () {
+            if (TranslationManager._MOG_SceneMenuDepth > 0 &&
+                !patchedInstances.has(this) &&
+                typeof this.makeCommandList === 'function'
+            ) {
+                const _makeCL = this.makeCommandList;
+                Object.defineProperty(this, 'makeCommandList', {
+                    configurable: true,
+                    writable: true,
+                    enumerable: false,
+                    value: function () {
+                        return TranslationManager.fetchRawData(() => {
+                            return TranslationManager.disablePluginTrans(() => {
+                                return _makeCL.apply(this, arguments);
+                            })
+                        })
+                    }
+                });
+                patchedInstances.add(this);
+            }
+            return _initialize.apply(this, arguments);
+        }
+        Scene_Menu._jtMOG_SceneMenuPatched = true;
     }
 
     //DestinationWindow.js
@@ -5226,6 +5285,10 @@
     //TextScriptBaseScript.js related Triacontane extension
     //MZ
     //on hold
+
+    //MKR_InputEnemyName.js
+    //MV
+    //don seem to be user spcae plugin
 
     //#endregion
 
@@ -5368,6 +5431,7 @@
         patch_MNKR_MessageAlignCenterMV();
         patch_MNKR_EnemyIcon();
         patch_MKR_ControlCharacterEx();
+        patch_MOG_SceneMenu();
     };
     //#endregion
 
