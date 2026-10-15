@@ -2,7 +2,7 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.4.05.7 MOG MV plugins support
+ * @patch ver 0.4.10.11 MOG plugins support
  *        ver 0.3.10.2 MKR plugins primary support
  *        ver 0.2.10.5 munokura plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
@@ -5306,6 +5306,56 @@
         InfoText._jtMOG_AnimatedTextPatched = true;
     }
 
+    //MOG_AnimatedText.js
+    //1.0
+    //MZ
+    function patch_MOG_AnimatedText_MZ() {
+        if (Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof InfoText === 'undefined' ||
+            typeof InfoText.prototype.text !== 'function' ||
+            typeof InfoText.prototype.refreshText !== 'function' ||
+            typeof InfoText.prototype.loadInfoData !== 'function' ||
+            InfoText._jtMOG_AnimatedTextMZPatched
+        ) return;
+        const _text = InfoText.prototype.text;
+        const _refreshT = InfoText.prototype.refreshText;
+        const _loadID = InfoText.prototype.loadInfoData;
+        InfoText.prototype.text = function () {
+            const source = _text.apply(this, arguments);
+            if (typeof source !== 'string') return;
+            let padded = source.length % 2 === 0;
+            for (let i = 1; padded && i < source.length; i += 2) {
+                if (source[i] !== ' ') padded = false;
+            }
+            if (!padded) return TranslationManager.translate(source);
+            let raw = '';
+            for (let i = 0; i < source.length; i += 2) {
+                raw += source[i];
+            }
+            const translated = TranslationManager.translate(raw);
+            let result = '';
+            for (let i = 0; i < translated.length; i++) {
+                result += translated[i] + ' ';
+            }
+            return result;
+        };
+        InfoText.prototype.refreshText = function () {
+            return TranslationManager.skipPluginTrans(() => {
+                return _refreshT.apply(this, arguments);
+            })
+        }
+        InfoText.prototype.loadInfoData = function () {
+            const data = this.data();
+            const saved = data && data[7];
+            if (Array.isArray(saved) && Array.isArray(this._letters) && saved.length !== this._letters.length) {
+                data[7] = null;
+                return;
+            }
+            return _loadID.apply(this, arguments);
+        }
+        InfoText._jtMOG_AnimatedTextMZPatched = true;
+    }
+
     //MOG_TimeSystem.js
     //1.6
     //MV
@@ -5386,6 +5436,30 @@
         TreasureIcons._jtMOG_TreasurePopupPatched = true;
     }
 
+    //MOG_TreasurePopup.js
+    //1.1
+    //MZ
+    function patch_MOG_TreasurePopup_MZ() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof TreasureIcons === 'undefined' ||
+            TreasureIcons._jtMOG_TreasurePopupMZPatched
+        ) return;
+        ['setupNew', 'refreshName'].forEach(function (key) {
+            const ori = TreasureIcons.prototype[key];
+            TreasureIcons.prototype[key] = function () {
+                const item = key === 'setupNew' ? arguments[0] && arguments[0][0] : this._item;
+                if (!TranslationManager.getDataFieldState(item, 'name')) {
+                    return ori.apply(this, arguments);
+                }//cache after reloading save isnt dynamic structure
+                return TranslationManager.skipPluginTrans(() => {
+                    return ori.apply(this, arguments);
+                })
+            }
+        });
+        TreasureIcons._jtMOG_TreasurePopupMZPatched = true;
+    }
+
     //MOG_TreasureHud.js
     //1.3
     //MV
@@ -5403,6 +5477,76 @@
             })
         };
         Treasure_Hud._jtMOG_TreasureHudPatched = true;
+    }
+
+    //MOG_TreasureHud.js
+    //1.1
+    //MZ
+    function patch_MOG_TreasureHud_MZ() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Treasure_Hud === 'undefined' ||
+            typeof Treasure_Hud.prototype.refresh_name !== 'function' ||
+            Treasure_Hud._jtMOG_TreasureHudMZPatched
+        ) return;
+        const _refreshN = Treasure_Hud.prototype.refresh_name;
+        Treasure_Hud.prototype.refresh_name = function () {
+            const item = this.item();
+            if (!item || typeof item !== 'object' || !TranslationManager.getDataFieldState(item, 'name')) {
+                return _refreshN.apply(this, arguments);
+            }
+            return TranslationManager.skipPluginTrans(() => {
+                return _refreshN.apply(this, arguments);
+            })
+        };
+        Treasure_Hud._jtMOG_TreasureHudMZPatched = true;
+    }
+
+    //MOG_BattleCursor.js
+    //1.0
+    //MZ
+    function patch_MOG_BattleCursor() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Spriteset_Battle.prototype.createBattleCursor !== 'function' ||
+            Spriteset_Battle._jtMOG_BattleCursorPatched
+        ) return;
+        const patchedPrototypes = new WeakSet();
+        const _createBC = Spriteset_Battle.prototype.createBattleCursor;
+        function hasBoundDisplayName(battler) {
+            if (!battler) return false;
+            const target = battler.isEnemy() ? battler.enemy() : battler;
+            const key = battler.isEnemy() ? 'name' : '_name';
+            const field = TranslationManager.getDataFieldState(target, key);
+            if (!field) return false;
+            if (field.compareWithDatabaseRaw && TranslationManager.getRawData(target, key) !== field.databaseRaw) return false;
+            return true;
+        }
+        Spriteset_Battle.prototype.createBattleCursor = function () {
+            const previousChild = new Set(this._sprtField2 ? this._sprtField2.children : []);
+            const result = _createBC.apply(this, arguments);
+            for (const sprite of this._sprtField2.children) {
+                if (
+                    previousChild.has(sprite) ||
+                    sprite._spriteset !== this ||
+                    !sprite._battlerSprite
+                ) continue;
+                const proto = Object.getPrototypeOf(sprite);
+                if (patchedPrototypes.has(proto) || typeof proto.refreshName !== 'function') continue;
+                const _refreshN = proto.refreshName;
+                proto.refreshName = function () {
+                    if (!hasBoundDisplayName(this._battler)) {
+                        return _refreshN.apply(this, arguments);
+                    }
+                    return TranslationManager.skipPluginTrans(() => {
+                        return _refreshN.apply(this, arguments);
+                    })
+                }
+                patchedPrototypes.add(proto);
+            }
+            return result;
+        }
+        Spriteset_Battle._jtMOG_BattleCursorPatched = true;
     }
 
     //DestinationWindow.js
@@ -5615,10 +5759,14 @@
         patch_MOG_SceneMenu();
         patch_MOG_BattleCommands();
         patch_MOG_AnimatedText();
+        patch_MOG_AnimatedText_MZ();
         patch_MOG_TimeSystem();
         patch_MOG_Music_Book();
         patch_MOG_TreasurePopup();
+        patch_MOG_TreasurePopup_MZ();
         patch_MOG_TreasureHud();
+        patch_MOG_TreasureHud_MZ();
+        patch_MOG_BattleCursor();
     };
     //#endregion
 
