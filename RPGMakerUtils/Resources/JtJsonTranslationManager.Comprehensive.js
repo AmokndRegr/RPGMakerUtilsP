@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.4.10.11 MOG plugins support
+ * @patch ver 0.5.05.5 tomoaky MV plugins support
+ *        ver 0.4.10.11 MOG plugins support
  *        ver 0.3.10.2 MKR plugins primary support
  *        ver 0.2.10.5 munokura plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
@@ -5549,6 +5550,243 @@
         Spriteset_Battle._jtMOG_BattleCursorPatched = true;
     }
 
+    //TMTyping.js
+    //1.1
+    //MV
+    function patch_TMTyping() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_Message.prototype.kanaToRoma !== 'function' ||
+            typeof Window_Options.prototype.addTypingOptions !== 'function' ||
+            Game_Message._jtTMTypingPatched
+        ) return;
+        const Symbols = new Set([
+            'typingSI', 'typingTI', 'typingTU', 'typingHU',
+            'typingNN', 'typingJI', 'typingSHA', 'typingJA', 'typingCHA'
+        ]);
+        const _addTO = Window_Options.prototype.addTypingOptions;
+        Window_Options.prototype.addTypingOptions = function () {
+            return TranslationManager.disablePluginTrans(() => {
+                return _addTO.apply(this, arguments);
+            })
+        };
+        const _drawI = Window_Options.prototype.drawItem;
+        Window_Options.prototype.drawItem = function (index) {
+            if (!Symbols.has(this.commandSymbol(index))) {
+                return _drawI.apply(this, arguments);
+            }
+            const rect = this.itemRectForText(index);
+            const statusWidth = this.statusWidth();
+            const titleWidth = rect.width - statusWidth;
+            this.resetTextColor();
+            this.changePaintOpacity(this.isCommandEnabled(index));
+            this.drawText(
+                this.commandName(index),
+                rect.x, rect.y, titleWidth, 'left'
+            );
+            return TranslationManager.disablePluginTrans(() => {
+                return this.drawText(this.statusText(index), titleWidth, rect.y, statusWidth, 'right')
+            })
+        };
+        const patchedPrototypes = new WeakSet();
+        function romaProtect(proto, name) {
+            const ori = proto[name];
+            if (typeof ori !== 'function') return;
+            proto[name] = function () {
+                return TranslationManager.disablePluginTrans(() => {
+                    return ori.apply(this, arguments);
+                })
+            }
+        };
+        const _createSW = Window_Message.prototype.createSubWindows;
+        Window_Message.prototype.createSubWindows = function () {
+            const result = _createSW.apply(this, arguments);
+            const tWindow = this._typingWindow;
+            if (!tWindow) return result;
+            const proto = Object.getPrototypeOf(tWindow);
+            if (!patchedPrototypes.has(proto)) {
+                romaProtect(proto, 'textWidthEx');
+                romaProtect(proto, 'refreshRoma');
+                patchedPrototypes.add(proto);
+            }
+            return result;
+        }
+        Game_Message._jtTMTypingPatched = true;
+    }
+
+    //TMAnimeLight.js
+    //2.0.1
+    //MV
+    //sanely possible filename smh
+    function patch_TMAnimeLight() {
+        if (
+            typeof Game_Temp.prototype.createAnimeLightSinTable !== 'function' ||
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            Game_Temp._jtTMAnimeLightPatched ||
+            typeof Game_Interpreter.prototype.convertEscapeCharactersTM !== 'function'
+        ) return;
+        const active = new WeakSet();
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        const _convertECTM = Game_Interpreter.prototype.convertEscapeCharactersTM;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            const wasActive = active.has(this);
+            if (command === 'animeLight') active.add(this);
+            else active.delete(this);
+            try {
+                return _pluginC.apply(this, arguments);
+            } finally {
+                if (wasActive) active.add(this);
+                else active.delete(this);
+            }
+        };
+        Game_Interpreter.prototype.convertEscapeCharactersTM = function () {
+            if (!active.has(this)) {
+                return _convertECTM.apply(this, arguments);
+            }
+            return TranslationManager.fetchRawData(() => {
+                return _convertECTM.apply(this, arguments);
+            })
+        }
+        Game_Temp._jtTMAnimeLightPatched = true;
+    }
+
+    //TMGoogleMaps.js
+    //2.0
+    //MV
+    //Ive seen zero use case tbf
+    function patch_TMGoogleMaps() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_Temp.prototype.geoCoding !== 'function' ||
+            Game_Temp._jtTMGoogleMapsPatched
+        ) return;
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (command === 'geoCoding' && args && args[0] === 'actor') {
+                return TranslationManager.fetchRawData(() => {
+                    return _pluginC.apply(this, arguments);
+                })
+            }
+            return _pluginC.apply(this, arguments);
+        }
+        Game_Temp._jtTMGoogleMapsPatched = true;
+    }
+
+    //TMLogWindow.js
+    //1.1.1
+    //MV
+    //not quite confident abt this
+    //also TMJALogWindow.js
+    //0.1b
+    function patch_TMLogWindow() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Scene_Map.prototype.createMapLogWindow !== 'function' ||
+            Game_System._jtTMLogWindowPatched
+        ) return;
+        const wrappedWindows = new WeakSet();
+        function _protectWindow(window) {
+            if (wrappedWindows.has(window)) return;
+            const _drawTextEx = window.drawTextEx;
+            if (typeof _drawTextEx !== 'function') return;
+            window.drawTextEx = function () {
+                return TranslationManager.skipPluginTrans(() => {
+                    return _drawTextEx.apply(this, arguments);
+                })
+            }
+            wrappedWindows.add(window);
+        }
+        function _captureWindow(baseProto, callback) {
+            const _initialize = baseProto.initialize;
+            function wrappedInitialize() {
+                _protectWindow(this);
+                return _initialize.apply(this, arguments);
+            }
+            baseProto.initialize = wrappedInitialize;
+            try {
+                return callback();
+            } finally {
+                baseProto.initialize = _initialize;
+            }
+        }
+        const _createMLW = Scene_Map.prototype.createMapLogWindow;
+        Scene_Map.prototype.createMapLogWindow = function () {
+            return _captureWindow(Window_Base.prototype, () => { return _createMLW.apply(this, arguments) });
+        }
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (command !== 'openLogScene') {
+                return _pluginC.apply(this, arguments);
+            }
+            const _push = SceneManager.push;
+            SceneManager.push = function (sceneClass) {
+                _protectLogSceneClass(sceneClass);
+                return _push.apply(this, arguments);
+            }
+            try {
+                return _pluginC.apply(this, arguments);
+            } finally {
+                SceneManager.push = _push;
+            }
+        }
+        const wrappedScenes = new WeakSet();
+        function _protectLogSceneClass(sceneClass) {
+            const proto = sceneClass && sceneClass.prototype;
+            if (
+                !proto ||
+                wrappedScenes.has(proto) ||
+                typeof proto.createCreditsWindow !== 'function'
+            ) return;
+            const _createCreditsWindow = proto.createCreditsWindow;
+            proto.createCreditsWindow = function () {
+                return _captureWindow(Window_Selectable.prototype, () => { return _createCreditsWindow.apply(this, arguments) });
+            }
+            wrappedScenes.add(proto);
+        }
+        Game_System._jtTMLogWindowPatched = true;
+    }
+
+    //TMNamePop.js
+    //2.0.0
+    //MV
+    function patch_TMNamePop() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_CharacterBase.prototype.setNamePop !== 'function' ||
+            typeof Game_Interpreter.prototype.convertEscapeCharactersTM !== 'function' ||
+            Game_CharacterBase._jtTMNamePopPatched
+        ) return;
+        const _setNP = Game_CharacterBase.prototype.setNamePop;
+        Game_CharacterBase.prototype.setNamePop = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _setNP.apply(this, arguments);
+            })
+        };
+        const active = new WeakSet();
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        const _convertECTM = Game_Interpreter.prototype.convertEscapeCharactersTM;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            const wasActive = active.has(this);
+            if (command === 'namePop') active.add(this);
+            else active.delete(this);
+            try {
+                return _pluginC.apply(this, arguments);
+            } finally {
+                if (wasActive) active.add(this);
+                else active.delete(this);
+            }
+        }
+        Game_Interpreter.prototype.convertEscapeCharactersTM = function () {
+            if (!active.has(this)) {
+                return _convertECTM.apply(this, arguments);
+            }
+            return TranslationManager.fetchRawData(() => {
+                return _convertECTM.apply(this, arguments);
+            })
+        }
+        Game_CharacterBase._jtTMNamePopPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -5614,6 +5852,15 @@
     //MKR_InputEnemyName.js
     //MV
     //don seem to be user spcae plugin
+
+    //TMWindowCaption.js
+    //MV
+    //edge case can live w/ ig
+
+    //TMTextEscape.js
+    //1.4.1
+    //MV
+    //discard
 
     //#endregion
 
@@ -5767,6 +6014,11 @@
         patch_MOG_TreasureHud();
         patch_MOG_TreasureHud_MZ();
         patch_MOG_BattleCursor();
+        patch_TMTyping();
+        patch_TMAnimeLight();
+        patch_TMGoogleMaps();
+        patch_TMLogWindow();
+        patch_TMNamePop();
     };
     //#endregion
 
