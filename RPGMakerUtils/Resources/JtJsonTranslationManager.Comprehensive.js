@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.5.05.5 tomoaky MV plugins support
+ * @patch ver 0.6.05.16 YEP MV plugins primary support
+ *        ver 0.5.05.5 tomoaky MV plugins support
  *        ver 0.4.10.11 MOG plugins support
  *        ver 0.3.10.2 MKR plugins primary support
  *        ver 0.2.10.5 munokura plugins primary support
@@ -523,7 +524,7 @@
         sourceFields.forEach(function (field, property) {
             if (!Object.prototype.hasOwnProperty.call(target, property)) return;
 
-            //don handle override property since its mever specified as this line put
+            //don handle override property since its never specified as this line put
             if (TranslationManager.getDataFieldState(source, property) !== field) return;
             //vanilla dynamic logic d get lost as well
             if (field.readRaw) {
@@ -5787,6 +5788,1198 @@
         Game_CharacterBase._jtTMNamePopPatched = true;
     }
 
+    //YEP_AdvSwVar.js
+    //1.0.2
+    //MV
+    function patch_YEP_AdvSwVar() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_Switches.prototype.isAdvancedSwitch !== 'function' ||
+            typeof Game_Switches.prototype.runAdvancedSwitchCode !== 'function' ||
+            typeof Game_Variables.prototype.isAdvancedVariable !== 'function' ||
+            typeof Game_Variables.prototype.runAdvancedVariableCode !== 'function' ||
+            Game_Variables._jtYEP_AdvSwVarPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        Game_Switches.prototype.isAdvancedSwitch = wrapRaw(Game_Switches.prototype.isAdvancedSwitch);
+        Game_Switches.prototype.runAdvancedSwitchCode = wrapRaw(Game_Switches.prototype.runAdvancedSwitchCode);
+        Game_Variables.prototype.isAdvancedVariable = wrapRaw(Game_Variables.prototype.isAdvancedVariable);
+        Game_Variables.prototype.runAdvancedVariableCode = wrapRaw(Game_Variables.prototype.runAdvancedVariableCode);
+        Game_Variables._jtYEP_AdvSwVarPatched = true;
+    }
+
+    //YEP_SelfSwVar.js
+    //1.04
+    //MV
+    function patch_YEP_SelfSwVar() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof DataManager.isSelfSwitch !== 'function' ||
+            typeof DataManager.isSelfVariable !== 'function' ||
+            DataManager._jtYEP_SelfSwVarPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        DataManager.isSelfSwitch = wrapRaw(DataManager.isSelfSwitch);
+        DataManager.isSelfVariable = wrapRaw(DataManager.isSelfVariable);
+        DataManager._jtYEP_SelfSwVarPatched = true;
+    }
+
+    TranslationManager.withPreparedDisplayText = function (callback) {
+        return this.skipPluginTrans(callback);
+    };
+    //Ask AI not me :/
+    //YEP_MessageCore.js
+    //1.19
+    //MV
+    //actually for several plugin complex
+    function patch_YEP_MessageCore() {
+        if (Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_MessageCore ||
+            TranslationManager._jtYEPMessagePatched) return;
+        const _BconvertEC = Window_Base.prototype.convertEscapeCharacters;
+        const _MconvertEC = Window_Message.prototype.convertEscapeCharacters;
+        const _id = String.raw`(?:\d+|\\V\[\d+\])`;
+        const _emit = String.raw`(?:AC|AN|PC|PN|NC|NI|NW|NA|NE|NS|NT|II|IW|IA|IS|IT|MAP|EN|ET)\[${_id}\]|G`;
+        const _param = String.raw`(?:Q[IWA]|[AE](?:LVL|MHP|HP%?|MMP|MP%?|MTP|TP%?|ATK|DEF|MAT|MDF|AGI|LUK|HIT|EVA|CRI|CEV|MEV|MRF|CNT|HRG|MRG|TRG|TGR|GRD|REC|PHA|MCR|TCR|PDR|MDR|FDR|EXR|EXP|GOLD))\[${_id}\]`;
+        const _controls = String.raw`COMPARE\d*<.*?:.*?>|${_emit}|${_param}|FN<.*?>|LSN<.*?>|EVALTEXT<<.*?>>|CASE(?:EVAL|SWITCH)\{.*?\}|(?:MSGPOSX|MSGPOSY|MSGROWS|MSGWIDTH)\[.*?\]`;
+        const _logicRE = () => new RegExp(
+            String.raw`[\\\x1b](?:${_controls}|M\[.*?\])|<(?:WordWrap|BR|line break)>`,
+            'gi'
+        );
+        const _tokenRE = () => new RegExp(String.raw`\\(?:${_controls})`, 'gi');
+        let _frame = null;
+        let _serial = 0;
+        let _replayInput = 0;
+        TranslationManager.withPreparedDisplayText = function (callback) {
+            _replayInput++;
+            try {
+                return TranslationManager.skipPluginTrans(callback);
+            } finally {
+                _replayInput--;
+            }
+        };
+        let _fragmentDepth = 0;
+        function _matches(text, re) {
+            const copy = new RegExp(re.source, re.flags);
+            const out = [];
+            let m;
+            while ((m = copy.exec(text))) {
+                out.push(m);
+                if (!m[0]) copy.lastIndex++;
+            }
+            return out;
+        }
+        function _live(s, index) {
+            let count = 0;
+            while (index > 0 && s[--index] === '\\') count++;
+            return count % 2 === 0;
+        }
+        function _protectedMatches(text) {
+            const result = _matches(text, _logicRE())
+                .filter(m => _live(text, m.index));
+            if (Yanfly.Param.QuickMacro && Yanfly.MsgMacroArr) {
+                const escaped = text.replace(/\\/g, '\x1b')
+                    .replace(/\x1b\x1b/g, '\uE002\uE002');
+                for (const re of Yanfly.MsgMacroArr) {
+                    if (!re) continue;
+                    for (const m of _matches(escaped, re)) {
+                        result.push({
+                            0: text.slice(m.index, m.index + m[0].length),
+                            index: m.index
+                        });
+                    }
+                }
+            }
+            return result;
+        }
+        const _translate = TranslationManager.translate;
+        TranslationManager.translate = function (
+            text, spaces = true, times = Infinity, cache = true, mask = null
+        ) {
+            if (typeof text !== 'string') {
+                return _translate.apply(this, arguments);
+            }
+            const spans = _protectedMatches(text);
+            if (!spans.length) return _translate.apply(this, arguments);
+            const candidate = this._dict && this._dict[text];
+            const same = typeof candidate === 'string' &&
+                JSON.stringify(spans.map(m => m[0])) ===
+                JSON.stringify(_protectedMatches(candidate).map(m => m[0]));
+            if (same && (!mask || !mask.length)) {
+                return _translate.call(this, text, spaces, times, cache, mask);
+            }
+            const ranges = (Array.isArray(mask) ? mask : []).concat(
+                spans.map(m => [m.index, m.index + m[0].length])
+            );
+            return _translate.call(this, text, spaces, times, cache, ranges);
+        };
+        const _setWordWrap = Window_Base.prototype.setWordWrap;
+        Window_Base.prototype.setWordWrap = function (text) {
+            return _fragmentDepth ? text : _setWordWrap.call(this, text);
+        };
+        function _rawConvert(win, text) {
+            _fragmentDepth++;
+            try {
+                return TranslationManager.fetchRawData(() =>
+                    TranslationManager.disablePluginTrans(() => _BconvertEC.call(win, text))
+                );
+            } finally {
+                _fragmentDepth--;
+            }
+        }
+        function _sourceTranslate(text) {
+            const flags = text.split('\n')
+                .map(line => /<WordWrap>/i.test(line));
+            const wrapped = flags.some(Boolean);
+            const direct = TranslationManager._dict && TranslationManager._dict[text];
+            let output = typeof direct === 'string' &&
+                wrapped === /<WordWrap>/i.test(direct)
+                ? TranslationManager.translate(text)
+                : TranslationManager.translate(text.replace(/<WordWrap>/gi, ''));
+            output = output.replace(/<WordWrap>/gi, '');
+            if (!wrapped) return output;
+            if (_frame && _frame.snapshot) {
+                const lines = output.split('\n');
+                const allWrapped = flags.every(Boolean);
+                if (allWrapped || flags.length === lines.length) {
+                    return lines.map((line, i) =>
+                        (allWrapped || flags[i] ? '<WordWrap>' : '') + line
+                    ).join('\n');
+                }
+            }
+            return '<WordWrap>' + output;
+        }
+        function _quickOverlaps(text, start, end) {
+            if (!Yanfly.Param.QuickMacro || !Yanfly.MsgMacroArr) {
+                return false;
+            }
+            const escaped = text
+                .replace(/\\/g, '\x1b')
+                .replace(/\x1b\x1b/g, '\uE002\uE002');
+            return Yanfly.MsgMacroArr.some(re =>
+                re && _matches(escaped, re).some(m =>
+                    m.index < end &&
+                    m.index + m[0].length > start
+                )
+            );
+        }
+        function _rawMacroSelectors(win, text) {
+            const v1 = String.raw`\\V\[\d+\]`;
+            const v2 = String.raw`\\V\[(?:\d+|${v1})\]`;
+            const control = String.raw`\\(?:V\[(?:\d+|${v1})\]|[NP]\[(?:\d+|${v1}|${v2})\])`;
+            const re = new RegExp(
+                String.raw`\\M\[((?:${control}|[^\[\]\r\n])*)\]`,
+                'gi'
+            );
+            return text.replace(re, (all, selector) => {
+                if (!/\\[VNP]\[/i.test(selector)) return all;
+                const name = TranslationManager.fetchRawData(() =>
+                    TranslationManager.disablePluginTrans(() => {
+                        const variable = (match, id) =>
+                            $gameVariables.value(parseInt(id, 10));
+                        return selector
+                            .replace(/\\V\[(\d+)\]/gi, variable)
+                            .replace(/\\V\[(\d+)\]/gi, variable)
+                            .replace(/\\N\[(\d+)\]/gi, (match, id) =>
+                                win.actorName(parseInt(id, 10)))
+                            .replace(/\\P\[(\d+)\]/gi, (match, id) =>
+                                win.partyMemberName(parseInt(id, 10)));
+                    })
+                );
+                if (/^\d+$/.test(name)) return '\\M[' + name + ']';
+                const id = Yanfly.MsgMacroRef[name.toUpperCase()];
+                return id ? '\\M[' + id + ']' : all;
+            });
+        }
+        const _nameRE = () =>
+            /\\(N[1-5]?|NC|NR|ND[1-5]?|NDC|NDR|NT[1-5]?|NTC|NTR)<((?:\\EVALTEXT<<.*?>>|\\CASE(?:EVAL|SWITCH)\{.*?\}|[^\r\n>])*?)>/gi;
+        function _prepare(win, text, context, internal, translated = false) {
+            if (internal) text = text.replace(/\x1b/g, '\\');
+            const rawNames = _matches(text, _nameRE())
+                .filter(m => _live(text, m.index) &&
+                    !_quickOverlaps(text, m.text, m.index + m[0].length)
+                );
+            let output = translated ? text : _sourceTranslate(text);
+            if (!internal && !context.snapshot) {
+                output = _rawMacroSelectors(win, output);
+            };
+            let nameIndex = 0;
+            if (context.message) {
+                output = output.replace(
+                    _nameRE(), (all, kind, display, offset, whole) => {
+                        if (!_live(whole, offset) || _quickOverlaps(whole, offset, offset + all.length)) return all;
+                        const raw = rawNames[nameIndex++];
+                        if (!raw ||
+                            raw[1].toUpperCase() !== kind.toUpperCase()) {
+                            throw new Error('Name code structure changed');
+                        }
+                        const key = 'JTNAME' + (++_serial);
+                        const rawName = _rawConvert(win, raw[2]);
+                        context.names.set(key, {
+                            raw: rawName,
+                            display: TranslationManager.translate(
+                                display === raw[2]
+                                    ? rawName
+                                    : _rawConvert(win, display)
+                            )
+                        });
+                        return '\\' + kind + '<' + key + '>';
+                    }
+                );
+            }
+            output = output.replace(_tokenRE(), (raw, offset, whole) => {
+                if (!_live(whole, offset) || _quickOverlaps(whole, offset, offset + raw.length)) return raw;
+                const key = '\uE000JTX' + (++_serial) + '\uE001';
+                const kind =
+                    /^\\(?:(?:AC|AN|PC|PN|NC|NI|NW|NA|NE|NS|NT|II|IW|IA|IS|IT|MAP|EN|ET)\[|G)/i.test(raw)
+                        ? 'emit'
+                        : /^\\COMPARE/i.test(raw) ? 'compare'
+                            : /^\\Q/i.test(raw) ? 'quantity'
+                                : /^\\A/i.test(raw) ? 'actor'
+                                    : /^\\E(?!VALTEXT)/i.test(raw) ? 'enemy'
+                                        : /^\\CASESWITCH/i.test(raw) ? 'switch'
+                                            : /^\\CASEEVAL/i.test(raw) ? 'case'
+                                                : /^\\EVALTEXT/i.test(raw) ? 'eval'
+                                                    : 'resource';
+                context.pending.set(key, { raw, kind });
+                return key;
+            });
+            return internal ? output.replace(/\\/g, '\x1b') : output;
+        }
+        function _resolve(win, text, context, kind) {
+            return text.replace(/\uE000JTX\d+\uE001/g, key => {
+                const item = context.pending.get(key);
+                if (!item || item.kind !== kind) return key;
+                const value = _rawConvert(win, item.raw);
+                return kind === 'resource' ? value : TranslationManager.translate(value);
+            });
+        }
+        Window_Message.prototype.convertEscapeCharacters = function (text) {
+            if (TranslationManager._translationDisableDepth || TranslationManager._translatedSkipDepth) {
+                return _MconvertEC.call(this, text);
+            }
+            const previous = _frame;
+            _frame = { message: true, names: new Map(), pending: new Map() };
+            try {
+                return _MconvertEC.call(this, text);
+            } finally {
+                _frame = previous;
+            }
+        };
+        Window_Base.prototype.convertEscapeCharacters = function (text) {
+            if (TranslationManager._translationDisableDepth ||
+                (TranslationManager._translatedSkipDepth && !_replayInput)) {
+                return _BconvertEC.call(this, text);
+            }
+            const previous = _frame;
+            if (!_frame) {
+                _frame = { message: false, names: new Map(), pending: new Map() };
+            }
+            try {
+                const prepared = _prepare(
+                    this, text, _frame, false, !!_replayInput
+                );
+                let result = TranslationManager.skipPluginTrans(() => {
+                    return TranslationManager.enableValueTrans(() => {
+                        return _BconvertEC.call(this, prepared);
+                    })
+                });
+                result = _resolve(this, result, _frame, 'resource');
+                result = _resolve(this, result, _frame, 'eval');
+                TranslationManager.pushConvertedText(result);
+                return result;
+            } finally {
+                _frame = previous;
+            }
+        };
+        const _convertEEC = Window_Base.prototype.convertExtraEscapeCharacters;
+        Window_Base.prototype.convertExtraEscapeCharacters = function (text) {
+            const result = _convertEEC.call(this, text);
+            return _frame && !TranslationManager._translationDisableDepth
+                ? _resolve(this, result, _frame, 'emit')
+                : result;
+        };
+        if (Window_Base.prototype.convertCaseText) {
+            const _convertCT = Window_Base.prototype.convertCaseText;
+            Window_Base.prototype.convertCaseText = function (text) {
+                if (!_frame || TranslationManager._translationDisableDepth) {
+                    return _convertCT.call(this, text);
+                }
+                const result = TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _convertCT.call(this, text);
+                    })
+                });
+                return _resolve(
+                    this, _resolve(this, result, _frame, 'switch'), _frame, 'case'
+                );
+            };
+        }
+        for (const [method, kind] of [
+            ['convertItemQuantitiesCodes', 'quantity'],
+            ['convertActorParameterCodes', 'actor'],
+            ['convertEnemyParameterCodes', 'enemy'],
+            ['convertColorCompare', 'compare']
+        ]) {
+            const ori = Window_Base.prototype[method];
+            if (typeof ori !== 'function') continue;
+            Window_Base.prototype[method] = function (text) {
+                if (!_frame || TranslationManager._translationDisableDepth) {
+                    return ori.call(this, text);
+                }
+                return _resolve(this, ori.call(this, text), _frame, kind);
+            };
+        }
+        function _wrapRefresh(owner, key) {
+            const ori = owner && owner[key];
+            if (typeof ori !== 'function') return;
+            owner[key] = function (text) {
+                if (TranslationManager._translationDisableDepth) {
+                    return ori.apply(this, arguments);
+                }
+                const named = _frame && _frame.names.get(text);
+                if (TranslationManager._translatedSkipDepth && !named) {
+                    return ori.apply(this, arguments);
+                }
+                const pair = named || { raw: text, display: TranslationManager.translate(text) };
+                const args = Array.prototype.slice.call(arguments);
+                args[0] = pair.display;
+                const previousFrame = _frame;
+                const format = Yanfly.Param.MSGNameBoxText;
+                const prefix = _sourceTranslate(format);
+                _frame = null;
+                _replayInput++;
+                try {
+                    Yanfly.Param.MSGNameBoxText =
+                        Window_Base.prototype.convertEscapeCharacters.call(this, prefix);
+                } finally {
+                    _replayInput--;
+                    _frame = previousFrame;
+                }
+                _frame = null;
+                try {
+                    const result = TranslationManager.skipPluginTrans(() =>
+                        ori.apply(this, args)
+                    );
+                    this._lastNameText = pair.raw;
+                    return result;
+                } finally {
+                    _frame = previousFrame;
+                    Yanfly.Param.MSGNameBoxText = format;
+                }
+            };
+        }
+        for (const key of ['refresh', 'refreshDimmed', 'refreshTransparent']) {
+            _wrapRefresh(Window_NameBox.prototype, key);
+        }
+        if (Yanfly.EMP1) {
+            _wrapRefresh(Yanfly.EMP1, 'Window_NameBox_refresh');
+        }
+        if (Window_Message.prototype.hasDifferentNameBoxText) {
+            const ori = Window_Message.prototype.hasDifferentNameBoxText;
+            Window_Message.prototype.hasDifferentNameBoxText = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return ori.apply(this, arguments);
+                    })
+                });
+            };
+        }
+        for (const key of [
+            'actorClassName', 'partyClassName',
+            'actorNickname', 'partyNickname'
+        ]) {
+            const ori = Window_Base.prototype[key];
+            Window_Base.prototype[key] = function () {
+                const value = ori.apply(this, arguments);
+                return TranslationManager._translationDisableDepth ? value : TranslationManager.translate(value);
+            };
+        }
+        function _replay(owner, key) {
+            const ori = owner[key];
+            if (typeof ori !== 'function') return;
+            owner[key] = function () {
+                return TranslationManager.skipPluginTrans(() => ori.apply(this, arguments));
+            };
+        }
+        _replay(Window_Base.prototype, 'textWidthExCheck');
+        _replay(Window_Base.prototype, 'processNormalCharacter');
+        _replay(Window_Message.prototype, 'getFittedMessageRows');
+        _replay(Window_Message.prototype, 'getFittedMessageWidth');
+        if (Window_Base.prototype.convertMacroText) {
+            const ori = Window_Base.prototype.convertMacroText;
+            Window_Base.prototype.convertMacroText = function () {
+                if (!_frame || TranslationManager._translationDisableDepth) {
+                    return ori.apply(this, arguments);
+                }
+                const context = _frame;
+                const win = this;
+                const table = Yanfly.MsgMacro;
+                Yanfly.MsgMacro = new Proxy(table, {
+                    get(target, key) {
+                        const value = target[key];
+                        return !TranslationManager._translationDisableDepth &&
+                            typeof value === 'string' &&
+                            /^\d+$/.test(String(key))
+                            ? _prepare(win, value, context, true)
+                            : value;
+                    }
+                });
+                try {
+                    return ori.apply(this, arguments);
+                } finally {
+                    Yanfly.MsgMacro = table;
+                }
+            };
+        }
+        if (typeof Window_MessageBacklog !== 'undefined') {
+            const _convertMT = Window_MessageBacklog.prototype.convertMessageText;
+            const _removeMBOC = Window_MessageBacklog.prototype.removeMessageBoxOnlyCodes;
+            const _convertNC = Window_MessageBacklog.prototype.convertNameboxCodes;
+            const _addC = Window_MessageBacklog.prototype.addCommand;
+            let backLogLineBuildDepth = 0;
+            const _addIL = Window_MessageBacklog.prototype.addIndividualLines;
+            Window_MessageBacklog.prototype.addIndividualLines = function () {
+                backLogLineBuildDepth++;
+                try {
+                    return _addIL.apply(this, arguments);
+                } finally {
+                    backLogLineBuildDepth--;
+                }
+            }
+            Window_MessageBacklog.prototype.addCommand = function () {
+                if (backLogLineBuildDepth > 0 && TranslationManager._translatedSkipDepth > 0) {
+                    return _Window_Command_addCommand.apply(this, arguments);
+                }
+                return _addC.apply(this, arguments);
+            }
+            let preparedInput = 0;
+            function _known() {
+                return $gameSystem._jtYEPBacklogPrepared ||
+                    ($gameSystem._jtYEPBacklogPrepared = []);
+            }
+            Window_MessageBacklog.prototype.convertNameboxCodes = function (text) {
+                if (!_frame || !_frame.snapshot || TranslationManager._translationDisableDepth) {
+                    return _convertNC.call(this, text);
+                }
+                const format = Yanfly.Param.MSGNameBoxText;
+                Yanfly.Param.MSGNameBoxText =
+                    _prepare(this, format, _frame, false);
+                try {
+                    return _convertNC.call(this, text);
+                } finally {
+                    Yanfly.Param.MSGNameBoxText = format;
+                }
+            };
+            Window_MessageBacklog.prototype.removeMessageBoxOnlyCodes = function (text) {
+                if (!_frame || !_frame.snapshot || TranslationManager._translationDisableDepth) {
+                    return _removeMBOC.call(this, text);
+                }
+                text = text.replace(/\uE000JTX\d+\uE001/g, key => {
+                    const item = _frame.pending.get(key);
+                    if (!item) return key;
+                    if (item.kind === 'emit' && /^\\G$/i.test(item.raw)) {
+                        return TranslationManager.translate(TextManager.currencyUnit);
+                    }
+                    return TranslationManager.fetchRawData(() => {
+                        return TranslationManager.disablePluginTrans(() => {
+                            return _convertMT.call(this, item.raw);
+                        })
+                    });
+                });
+                return _removeMBOC.call(this, text);
+            };
+            Window_MessageBacklog.prototype.convertMessageText = function (text) {
+                if (TranslationManager._translationDisableDepth) {
+                    return _convertMT.call(this, text);
+                }
+                if (_known().includes(text)) return text;
+                const previous = _frame;
+                _frame = {
+                    message: false,
+                    names: new Map(),
+                    pending: new Map(),
+                    snapshot: true
+                };
+                try {
+                    const source = _prepare(
+                        this, text, _frame, false, preparedInput > 0
+                    );
+                    const output = TranslationManager.skipPluginTrans(() => {
+                        return TranslationManager.enableValueTrans(() => {
+                            return _convertMT.call(this, source);
+                        })
+                    });
+                    const records = _known();
+                    records.push(output);
+                    const limit = Math.max(
+                        128, 2 * Yanfly.Param.MsgBacklogMaxEntries
+                    );
+                    while (records.length > limit) records.shift();
+                    return output;
+                } finally {
+                    _frame = previous;
+                }
+            };
+            for (const key of ['addIndividualLines', 'drawItem']) {
+                const ori = Window_MessageBacklog.prototype[key];
+                Window_MessageBacklog.prototype[key] = function () {
+                    _replayInput++;
+                    try {
+                        return TranslationManager.skipPluginTrans(() =>
+                            ori.apply(this, arguments)
+                        );
+                    } finally {
+                        _replayInput--;
+                    }
+                };
+            }
+            for (const proto of [
+                Window_ChoiceList.prototype,
+                Window_NumberInput.prototype,
+                Window_EventItem.prototype
+            ]) {
+                const ori = proto.backlogAddSelectedChoice;
+                if (typeof ori !== 'function') continue;
+                proto.backlogAddSelectedChoice = function () {
+                    const format = Yanfly.Param.MsgBacklogSpcFmt;
+                    Yanfly.Param.MsgBacklogSpcFmt = _sourceTranslate(format);
+                    preparedInput++;
+                    try {
+                        return TranslationManager.skipPluginTrans(() =>
+                            ori.apply(this, arguments)
+                        );
+                    } finally {
+                        preparedInput--;
+                        Yanfly.Param.MsgBacklogSpcFmt = format;
+                    }
+                };
+            }
+            const _initMB = Game_System.prototype.initMessageBacklog;
+            Game_System.prototype.initMessageBacklog = function () {
+                const result = _initMB.apply(this, arguments);
+                this._jtYEPBacklogPrepared = [];
+                return result;
+            };
+        }
+        TranslationManager._jtYEPMessagePatched = true;
+    }
+
+    //YEP_SaveCore.js
+    //1.06
+    //MV
+    function patch_YEP_SaveCore() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_SaveCore ||
+            typeof Window_SaveInfo === 'undefined' ||
+            Window_SaveInfo._jtYEP_SaveCorePatched
+        ) return;
+        const _webSK = StorageManager.webStorageKey;
+        StorageManager.webStorageKey = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _webSK.apply(this, arguments);
+            })
+        };
+        const _makeSI = DataManager.makeSavefileInfo;
+        DataManager.makeSavefileInfo = function () {
+            const info = _makeSI.apply(this, arguments);
+            if (info && $dataSystem) {
+                info.title = TranslationManager.getRawData($dataSystem, 'gameTitle');
+            }
+            return info;
+        }
+        const _isTGF = DataManager.isThisGameFile;
+        DataManager.isThisGameFile = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _isTGF.apply(this, arguments);
+            })
+        }
+        function _patchTemplate(method, parameter) {
+            const ori = Window_SaveInfo.prototype[method];
+            Window_SaveInfo.prototype[method] = function () {
+                const source = Yanfly.Param[parameter];
+                Yanfly.Param[parameter] = TranslationManager.translate(source);
+                try {
+                    return TranslationManager.skipPluginTrans(() => {
+                        return ori.apply(this, arguments);
+                    })
+                } finally {
+                    Yanfly.Param[parameter] = source;
+                }
+            }
+        }
+        _patchTemplate('drawPartyLevels', 'SaveInfoActorLvFmt');
+        _patchTemplate('drawGoldCount', 'SaveVocabGoldCount');
+        Window_SaveInfo.prototype.drawVariable = function (id, dx, dy, dw) {
+            const name = TranslationManager.translate($dataSystem.variables[id]).replace(/<<(.*?)>>/i, '');
+            const text = Yanfly.Util.toGroup(this._saveContents.variables.value(id));
+            const diff = Math.max(0, (this.standardFontSize() - this.contents.fontSize) / 2);
+            if (name.length > 0) {
+                this._drawData = true;
+                try {
+                    this.changeTextColor(this.systemColor());
+                    TranslationManager.skipPluginTrans(() => {
+                        return this.drawTextEx(this.systemColorEx() + name, dx, dy + diff, dw, 'left');
+                    })
+                } finally {
+                    this._drawData = false;
+                }
+                this.changeTextColor(this.normalColor());
+                this.drawText(text, dx, dy, dw, 'right');
+            } else {
+                this.drawText(text, dx, dy, dw, 'center');
+            }
+        }
+        Window_SaveInfo._jtYEP_SaveCorePatched = true;
+    }
+
+    //YEP_X_NewGamePlus.js
+    //1.02
+    //MV
+    //maybe refactor copyboundfields?
+    function patch_YEP_X_NewGamePlus() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_X_NewGamePlus ||
+            !Imported.YEP_SaveCore ||
+            typeof DataManager.prepareNewGamePlusData !== 'function' ||
+            typeof DataManager.copyNewGamePlusActorData !== 'function' ||
+            typeof DataManager.carryOverNewGamePlusPartyData !== 'function' ||
+            DataManager._jtYEP_X_NewGamePlusPatched
+        ) return;
+        function _restoreFields(source, target, seen) {
+            if (!source || !target || typeof source !== 'object' || typeof target !== 'object') return;
+            seen = seen || new WeakSet();
+            if (seen.has(target)) return;
+            seen.add(target);
+            TranslationManager.copyBoundFields(source, target);
+            Object.keys(source).forEach(function (key) {
+                const from = Object.getOwnPropertyDescriptor(source, key);
+                const to = Object.getOwnPropertyDescriptor(target, key);
+                if (from && to && 'value' in from && 'value' in to) {
+                    _restoreFields(from.value, to.value, seen);
+                }
+            });
+        }
+        const _prepareNGPD = DataManager.prepareNewGamePlusData;
+        DataManager.prepareNewGamePlusData = function () {
+            const sources = {
+                switches: $gameSwitches._data,
+                variables: $gameVariables._data,
+                actors: $gameActors._data,
+                items: $gameParty._items,
+                weapons: $gameParty._weapons,
+                armors: $gameParty._armors,
+                dataItems: $dataItems,
+                dataWeapons: $dataWeapons,
+                dataArmors: $dataArmors,
+                indItems: this._independentItems,
+                indWeapons: this._independentWeapons,
+                indArmors: this._independentArmors
+            };
+            const result = _prepareNGPD.apply(this, arguments);
+            const backup = this._ngpData;
+            if (backup) {
+                Object.keys(sources).forEach(function (key) {
+                    _restoreFields(sources[key], backup[key]);
+                });
+            }
+            return result;
+        }
+        const _copyNGPAD = DataManager.copyNewGamePlusActorData;
+        DataManager.copyNewGamePlusActorData = function (actor, id) {
+            const result = _copyNGPAD.apply(this, arguments);
+            if (result !== actor && this._ngpData) {
+                _restoreFields(this._ngpData.actors[id], result);
+            }
+            return result;
+        }
+        const _carryONGPPD = DataManager.carryOverNewGamePlusPartyData;
+        DataManager.carryOverNewGamePlusPartyData = function () {
+            const result = _carryONGPPD.apply(this, arguments);
+            const backup = this._ngpData;
+            if (backup) {
+                _restoreFields(backup.dataItems, $dataItems);
+                _restoreFields(backup.dataWeapons, $dataWeapons);
+                _restoreFields(backup.dataArmors, $dataArmors);
+                _restoreFields(backup.indItems, this._independentItems);
+                _restoreFields(backup.indWeapons, this._independentWeapons);
+                _restoreFields(backup.indArmors, this._independentArmors);
+            }
+            return result;
+        }
+        DataManager._jtYEP_X_NewGamePlusPatched = true;
+    }
+
+    //YEP_BaseParamControl.js
+    //1.04
+    //MV
+    //it rlly used name in scripts in example :o
+    function patch_YEP_BaseParamControl() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            Imported._jtYEP_BaseParamControlPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        if (Imported.YEP_BaseParamControl &&
+            Imported.YEP_X_ClassBaseParam &&
+            typeof Game_Actor.prototype.classBaseParamFormula === 'function'
+        ) {
+            Game_Actor.prototype.classBaseParamFormula = wrapRaw(Game_Actor.prototype.classBaseParamFormula);
+        }
+        if (Imported.YEP_EnemyLevels &&
+            Imported.YEP_X_EnemyBaseParam &&
+            typeof Game_Enemy.prototype.customEnemyBaseParamFormula === 'function'
+        ) {
+            Game_Enemy.prototype.customEnemyBaseParamFormula = wrapRaw(Game_Enemy.prototype.customEnemyBaseParamFormula);
+        }
+        Imported._jtYEP_BaseParamControlPatched = true;
+    }
+
+    //YEP_SpecialParamFormula.js
+    //1.06
+    //MV
+    function patch_YEP_SpecialParamFormula() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_SpecialParamFormula ||
+            Imported._jtYEP_SpecialParamFormulaPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        if (typeof Game_BattlerBase.prototype.sparam === 'function') {
+            Game_BattlerBase.prototype.sparam = wrapRaw(Game_BattlerBase.prototype.sparam);
+        }
+        if (typeof Game_Actor.prototype.basicFloorDamage === 'function') {
+            Game_Actor.prototype.basicFloorDamage = wrapRaw(Game_Actor.prototype.basicFloorDamage);
+        }
+        if (typeof Game_Actor.prototype.benchMembersExpRate === 'function') {
+            Game_Actor.prototype.benchMembersExpRate = wrapRaw(Game_Actor.prototype.benchMembersExpRate);
+        }
+        if (typeof Game_Action.prototype.applyGuard === 'function') {
+            Game_Action.prototype.applyGuard = wrapRaw(Game_Action.prototype.applyGuard);
+        }
+        Imported._jtYEP_SpecialParamFormulaPatched = true;
+    }
+
+    //YEP_ItemCore.js
+    //1.30
+    //MV
+    function patch_YEP_ItemCore() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_ItemCore ||
+            Imported._jtYEP_ItemCorePatched
+        ) return;
+        const installed = new WeakSet();
+        function _bindMutableFields(item) {
+            if (!item) return;
+            ['name', 'description'].forEach(function (key) {
+                const field = TranslationManager.bindDataField(item, key);
+                if (!field || field.readRaw || installed.has(field)) return;
+                const descriptor = Object.getOwnPropertyDescriptor(item, key);
+                field.translated = TranslationManager.translate(field.raw);
+                Object.defineProperty(item, key, {
+                    configurable: descriptor.configurable,
+                    enumerable: descriptor.enumerable,
+                    get: descriptor.get,
+                    set: function (value) {
+                        if (TranslationManager.isJsonExEncoding()) return;
+                        field.raw = value;
+                        field.translated = TranslationManager.translate(value);
+                    }
+                });
+                installed.add(field);
+            })
+        }
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        const _setNII = ItemManager.setNewIndependentItem;
+        ItemManager.setNewIndependentItem = function (baseItem, newItem) {
+            _bindMutableFields(newItem);
+            return TranslationManager.fetchRawData(() => {
+                return _setNII.apply(this, arguments);
+            })
+        };
+        const _updateIN = ItemManager.updateItemName;
+        ItemManager.updateItemName = function (item) {
+            _bindMutableFields(item);
+            return TranslationManager.fetchRawData(() => {
+                return _updateIN.apply(this, arguments);
+            })
+        };
+        const _loadII = DataManager.loadIndependentItems;
+        DataManager.loadIndependentItems = function () {
+            const result = _loadII.apply(this, arguments);
+            [
+                this._independentItems,
+                this._independentWeapons,
+                this._independentArmors
+            ].forEach(function (group) {
+                if (group) group.forEach(_bindMutableFields);
+            });
+            return result;
+        };
+        if (typeof ItemManager.onCreationEval === 'function') {
+            ItemManager.onCreationEval = wrapRaw(ItemManager.onCreationEval);
+        };
+        if (typeof ItemManager.effectIUSResetStat === 'function') {
+            ItemManager.effectIUSResetStat = wrapRaw(ItemManager.effectIUSResetStat);
+        };
+        if (typeof ItemManager.applyAugmentSetBaseName === 'function') {
+            ItemManager.applyAugmentSetBaseName = wrapRaw(ItemManager.applyAugmentSetBaseName);
+        };
+        if (typeof ItemManager.disassembleEval === 'function') {
+            ItemManager.disassembleEval = wrapRaw(ItemManager.disassembleEval);
+        };
+        if (typeof ItemManager.effectIUSEval === 'function') {
+            ItemManager.effectIUSEval = wrapRaw(ItemManager.effectIUSEval);
+        };
+        if (typeof Window_ItemInfo !== 'undefined') {
+            if (typeof Window_ItemInfo.prototype.preInfoEval === 'function') {
+                Window_ItemInfo.prototype.preInfoEval = wrapRaw(Window_ItemInfo.prototype.preInfoEval);
+            };
+            function _installInfoText(method, property) {
+                Window_ItemInfo.prototype[method] = function (dy) {
+                    const item = this._item;
+                    if (item[property] === undefined) {
+                        item[property] = DataManager.getBaseItem(item)[property];
+                    }
+                    const source = item[property];
+                    if (source === '') return dy;
+                    const lines = TranslationManager.translate(source).split(/[\r\n]+/);
+                    return TranslationManager.skipPluginTrans(() => {
+                        lines.forEach((line) => {
+                            this.resetFontSettings();
+                            this.drawTextEx(line, this.textPadding(), dy);
+                            dy += this.contents.fontSize + 8;
+                        });
+                        return dy;
+                    })
+                }
+            }
+            _installInfoText('drawInfoTextTop', 'infoTextTop');
+            _installInfoText('drawInfoTextBottom', 'infoTextBottom');
+        }
+        if (typeof Window_ItemActionCommand !== 'undefined') {
+            const _drawItem = Window_ItemActionCommand.prototype.drawItem;
+            Window_ItemActionCommand.prototype.drawItem = function () {
+                return TranslationManager.skipPluginTrans(() => {
+                    return _drawItem.apply(this, arguments);
+                })
+            }
+        }
+        ['ItemRecoverFmt', 'ItemUseCmd', 'ItemCarryFmt'].forEach(function (key) {
+            Yanfly.Param[key] = TranslationManager.translate(Yanfly.Param[key]);
+        });
+        Imported._jtYEP_ItemCorePatched = true;
+    }
+
+    //YEP_X_AttachAugments.js
+    //1.11
+    //MV
+    function patch_YEP_X_AttachAugments() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_ItemCore ||
+            !Imported.YEP_X_AttachAugments ||
+            typeof Window_ItemActionCommand === 'undefined' ||
+            typeof Window_ItemActionCommand.prototype.addAugmentSlots !== 'function' ||
+            Imported._jtYEP_X_AttachAugmentsPatched
+        ) return;
+        const params = PluginManager.parameters('YEP_X_AttachAugments');
+        const _processAE = ItemManager.processAugmentEval;
+        ItemManager.processAugmentEval = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _processAE.apply(this, arguments);
+            })
+        };
+        function _slotLabel(item, index) {
+            const slots = item.augmentSlots;
+            const raw = slots[index];
+            const key = DataManager.isWeapon(item) ? 'Weapon Slots' : 'Armor Slots';
+            const source = params[key];
+            if (typeof source === 'string') {
+                const originals = source.split(',').map(s => s.trim());
+                const usesDefaults = slots.length === originals.length && slots.every((s, i) => s === originals[i]);
+                if (usesDefaults) {
+                    const labels = TranslationManager.translate(source).split(/[,，]/).map(s => s.trim());
+                    if (labels.length === originals.length && labels.every(s => s.length > 0)) {
+                        return labels[index];
+                    }
+                }
+            }
+            return TranslationManager.translate(raw);
+        }
+        function _componentText(item, slot) {
+            const component = ItemManager.augmentInSlot(item, slot);
+            if (!component) {
+                return TranslationManager.translate(Yanfly.Param.AugmentNoneText);
+            }
+            return '\\i[' + component.iconIndex + ']' + TranslationManager.getTranslatedData(component, 'name');
+        }
+        const _getASIN = Window_ItemActionCommand.prototype.getAugmentSlotItemName;
+        Window_ItemActionCommand.prototype.getAugmentSlotItemName = function (slot) {
+            _getASIN.apply(this, arguments);
+            return _componentText(this._item, slot);
+        };
+        Window_ItemActionCommand.prototype.addAugmentSlots = function () {
+            const item = this._item;
+            ItemManager.checkAugmentSlots(item);
+            const format = TranslationManager.translate(Yanfly.Param.AugmentSlotFmt);
+            for (let i = 0; i < item.augmentSlots.length; ++i) {
+                const text = format.format(_slotLabel(item, i), this.getAugmentSlotItemName(i));
+                TranslationManager.pushConvertedText(text);
+                this.addCommand(text, 'augment', item.augmentSlotEnable[i], i);
+            }
+            this.changePaintOpacity(true);
+        }
+        if (
+            typeof Window_ItemInfo !== 'undefined' &&
+            typeof Window_ItemInfo.prototype.drawAugmentData === 'function'
+        ) {
+            Window_ItemInfo.prototype.drawAugmentData = function (slot, dy) {
+                const text = _componentText(this._item, slot);
+                return TranslationManager.skipPluginTrans(() => {
+                    return this.drawTextEx(text, this.textPadding(), dy);
+                })
+            }
+        }
+        Imported._jtYEP_X_AttachAugmentsPatched = true;
+    }
+
+    //YEP_X_CondShopPrices.js
+    //1.01
+    //MV
+    function patch_YEP_X_CondShopPrices() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_ShopMenuCore ||
+            !Imported.YEP_X_CondShopPrices ||
+            typeof Yanfly === 'undefined' ||
+            !Yanfly.Param ||
+            typeof Window_ShopBuy === 'undefined' ||
+            typeof Window_ShopBuy.prototype.processConditionalShopPrices !== 'function' ||
+            Imported._jtYEP_X_CondShopPricesPatched
+        ) return;
+        const _CnSPFP = Yanfly.Param.CnShPrFinalizePrice;
+        if (typeof _CnSPFP !== 'function') return;
+        Yanfly.Param.CnShPrFinalizePrice = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _CnSPFP.apply(this, arguments);
+            })
+        };
+        Imported._jtYEP_X_CondShopPricesPatched = true;
+    }
+
+    //YEP_X_EquipRequirements.js
+    //1.09
+    //MV
+    function patch_YEP_X_EquipRequirements() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_EquipCore ||
+            !Imported.YEP_X_EquipRequirements ||
+            typeof Window_EquipRequirement === 'undefined' ||
+            typeof Game_BattlerBase.prototype.meetEquipEvalRequirements !== 'function' ||
+            Imported._jtYEP_X_EquipRequirementsPatched
+        ) return;
+        const _meetEER = Game_BattlerBase.prototype.meetEquipEvalRequirements;
+        Game_BattlerBase.prototype.meetEquipEvalRequirements = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _meetEER.apply(this, arguments);
+            })
+        }
+        function _wrapTemplateDraw(method) {
+            const ori = Window_EquipRequirement.prototype[method];
+            Window_EquipRequirement.prototype[method] = function () {
+                const least = Yanfly.Param.EqReqAtLeast;
+                const most = Yanfly.Param.EqReqAtMost;
+                try {
+                    Yanfly.Param.EqReqAtLeast = TranslationManager.translate(least);
+                    Yanfly.Param.EqReqAtMost = TranslationManager.translate(most);
+                    return TranslationManager.withPreparedDisplayText(() => {
+                        return ori.apply(this, arguments);
+                    })
+                } finally {
+                    Yanfly.Param.EqReqAtLeast = least;
+                    Yanfly.Param.EqReqAtMost = most;
+                }
+            }
+        }
+        _wrapTemplateDraw('drawLevelRequirements');
+        _wrapTemplateDraw('drawParamRequirements');
+        const _drawSR = Window_EquipRequirement.prototype.drawSwitchRequirements;
+        Window_EquipRequirement.prototype.drawSwitchRequirements = function () {
+            return TranslationManager.withPreparedDisplayText(() => {
+                return _drawSR.apply(this, arguments);
+            })
+        }
+        Imported._jtYEP_X_EquipRequirementsPatched = true;
+    }
+
+    //YEP_X_HideShowShopItems.js
+    //1.00
+    //MV
+    function patch_YEP_X_HideShowShopItems() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_ShopMenuCore ||
+            !Imported.YEP_X_HideShowShopItems ||
+            typeof Yanfly === 'undefined' ||
+            !Yanfly.Param ||
+            typeof Scene_Shop === 'undefined' ||
+            typeof Scene_Shop.prototype.isGoodShown !== 'function' ||
+            Imported._jtYEP_X_HideShowShopItemsPatched
+        ) return;
+        const _HSSIFC = Yanfly.Param.HSSIFinalizeCode;
+        if (typeof _HSSIFC !== 'function') return;
+        Yanfly.Param.HSSIFinalizeCode = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _HSSIFC.apply(this, arguments);
+            })
+        }
+        Imported._jtYEP_X_HideShowShopItemsPatched = true;
+    }
+
+    //YEP_X_ItemDurability.js
+    //1.04
+    //MV
+    function patch_YEP_X_ItemDurability() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_X_ItemDurability ||
+            Imported._jtYEP_X_ItemDurabilityPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        Game_Actor.prototype.customDurabilityBreakEval = wrapRaw(Game_Actor.prototype.customDurabilityBreakEval);
+        Game_Action.prototype.durabilityEval = wrapRaw(Game_Action.prototype.durabilityEval);
+        Scene_Item.prototype.onRepairEval = wrapRaw(Scene_Item.prototype.onRepairEval);
+        Imported._jtYEP_X_ItemDurabilityPatched = true;
+    }
+
+    //YEP_X_ItemRequirements.js
+    //1.02
+    //MV
+    function patch_YEP_X_ItemRequirements() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_ItemCore ||
+            !Imported.YEP_X_ItemRequirements ||
+            typeof ItemManager === 'undefined' ||
+            Imported._jtYEP_X_ItemRequirementsPatched
+        ) return;
+        const methods = [
+            'usableItemRequirementEval',
+            'usableItemRequirementVariable',
+            'checkCustomUsableItemRequirement'
+        ]
+        methods.forEach(function (name) {
+            const ori = ItemManager[name];
+            if (typeof ori !== 'function') return;
+            ItemManager[name] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                })
+            }
+        });
+        Imported._jtYEP_X_ItemRequirementsPatched = true;
+    }
+
+    //YEP_X_EquipSkillTiers.js
+    //1.03
+    //MV
+    function patch_YEP_X_EquipSkillTiers() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_EquipBattleSkills ||
+            !Imported.YEP_X_EquipSkillTiers ||
+            typeof Yanfly === 'undefined' ||
+            !Yanfly.Param ||
+            !Yanfly.Param.ESTSort ||
+            typeof Window_SkillEquip === 'undefined' ||
+            Window_SkillEquip._jtYEP_X_EquipSkillTiersPatched
+        ) return;
+        const _getS = Window_SkillEquip.prototype.getSkills;
+        Window_SkillEquip.prototype.getSkills = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _getS.apply(this, arguments);
+            })
+        };
+        Window_SkillEquip._jtYEP_X_EquipSkillTiersPatched = true;
+    }
+
+    //YEP_KeyboardConfig.js
+    //1.04
+    //MV
+    function patch_YEP_KeyboardConfig() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_KeyboardConfig ||
+            typeof Window_KeyConfig === 'undefined' ||
+            Window_KeyConfig._jtYEP_KeyboardConfigPatched
+        ) return;
+        const _addC = Window_KeyConfig.prototype.addCommand;
+        Window_KeyConfig.prototype.addCommand = function (name, symbol, enabled, ext) {
+            if (symbol === 'key') {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _addC.apply(this, arguments);
+                })
+            }
+            return _addC.apply(this, arguments);
+        }
+        Window_KeyConfig._jtYEP_KeyboardConfigPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -6019,6 +7212,21 @@
         patch_TMGoogleMaps();
         patch_TMLogWindow();
         patch_TMNamePop();
+        patch_YEP_AdvSwVar();
+        patch_YEP_SelfSwVar();
+        patch_YEP_SaveCore();
+        patch_YEP_X_NewGamePlus();
+        patch_YEP_BaseParamControl();
+        patch_YEP_SpecialParamFormula();
+        patch_YEP_ItemCore();
+        patch_YEP_X_AttachAugments();
+        patch_YEP_X_CondShopPrices();
+        patch_YEP_X_EquipRequirements();
+        patch_YEP_X_HideShowShopItems();
+        patch_YEP_X_ItemDurability();
+        patch_YEP_X_ItemRequirements();
+        patch_YEP_X_EquipSkillTiers();
+        patch_YEP_KeyboardConfig();
     };
     //#endregion
 
@@ -6178,6 +7386,7 @@
         if (ready && !DataManager._translationApplied && TranslationManager.isInitialized()) {
             patch_DescriptionTemplate();
             _registerSGCategoryTrans();
+            patch_YEP_MessageCore();
             TranslationManager.translateCommonData();
             patchPlugin();
             DataManager._translationApplied = true;
