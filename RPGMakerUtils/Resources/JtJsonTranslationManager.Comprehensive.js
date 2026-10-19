@@ -2,9 +2,10 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.6.05.16 YEP MV plugins primary support
+ * @patch ver 0.7.05.32 FTKR MV plugins support
+ *        ver 0.6.05.16 YEP MV plugins support
  *        ver 0.5.05.5 tomoaky MV plugins support
- *        ver 0.4.10.11 MOG plugins support
+ *        ver 0.4.10.11 MOG plugins primary support
  *        ver 0.3.10.2 MKR plugins primary support
  *        ver 0.2.10.5 munokura plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
@@ -6980,6 +6981,1291 @@
         Window_KeyConfig._jtYEP_KeyboardConfigPatched = true;
     }
 
+    //FTKR_AddRoutineMoveCommands.js
+    //1.0.1
+    //MV
+    function patch_FTKR_AddRoutineMoveCommands() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_RMC ||
+            Game_Character._jtFTKR_AddRoutineMoveCommandsPatched
+        ) return;
+        const _processMC = Game_Character.prototype.processMoveCommand;
+        const _CEC = Window_Base.prototype.convertEscapeCharacters;
+        Window_Base.prototype.convertEscapeCharacters = function (text) {
+            const frame = TranslationManager._FTKR_moveScriptFrame;
+            if (frame && frame.pending && text === frame.command.parameters[0]) {
+                frame.pending = false;
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _CEC.apply(this, arguments);
+                    })
+                })
+            }
+            return _CEC.apply(this, arguments);
+        }
+        Game_Character.prototype.processMoveCommand = function (command) {
+            if (!command || command.code !== Game_Character.ROUTE_SCRIPT) {
+                return _processMC.apply(this, arguments);
+            }
+            const cached = Imported.FTKR_CEC && this._originalScriptCommands && this._originalScriptCommands[this._moveRouteIndex];
+            const source = cached || command.parameters[0];
+            const args = typeof source === 'string' ? /([^:\s]+)[ ]*:[ ]*(.*)/.exec(source) : null;
+            const needRaw = args && /^(START_IF|ELSE_IF|START_LOOP)$/.test(args[1].toUpperCase());
+            const previous = TranslationManager._FTKR_moveScriptFrame;
+            TranslationManager._FTKR_moveScriptFrame = {
+                command: command,
+                pending: !!Imported.FTKR_CEC
+            };
+            try {
+                return needRaw ? TranslationManager.fetchRawData(() => { return _processMC.call(this, command) }) : _processMC.call(this, command);
+            } finally {
+                TranslationManager._FTKR_moveScriptFrame = previous;
+            }
+        }
+        Game_Character._jtFTKR_AddRoutineMoveCommandsPatched = true;
+    }
+
+    //FTKR_AISkillEvaluate.js
+    //1.2.6
+    //MV
+    function patch_FTKR_AISkillEvaluate() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_ASE ||
+            Game_Action._jtFTKR_AISkillEvaluatePatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        if (typeof Game_Action.prototype.checkAseConditions === 'function') {
+            Game_Action.prototype.checkAseConditions = wrapRaw(Game_Action.prototype.checkAseConditions);
+        }
+        if (typeof Game_Action.prototype.bamEvaluateFormura === 'function') {
+            Game_Action.prototype.bamEvaluateFormura = wrapRaw(Game_Action.prototype.bamEvaluateFormura);
+        }
+        Game_Action._jtFTKR_AISkillEvaluatePatched = true;
+    }
+
+    //FTKR_AutoStateConditions.js
+    //1.0.1
+    //MV
+    function patch_FTKR_AutoStateConditions() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_ASC ||
+            DataManager._jtFTKR_AutoStateConditionsPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        if (typeof DataManager.evalAddStateConditions === 'function') {
+            DataManager.evalAddStateConditions = wrapRaw(DataManager.evalAddStateConditions);
+        }
+        if (typeof DataManager.evalRemoveStateConditions === 'function') {
+            DataManager.evalRemoveStateConditions = wrapRaw(DataManager.evalRemoveStateConditions);
+        }
+        DataManager._jtFTKR_AutoStateConditionsPatched = true;
+    }
+
+    //FTKR_AutoInvokeSkill.js
+    //1.3.2
+    //MV
+    function patch_FTKR_AutoInvokeSkill() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_AIS ||
+            Game_Actor._jtFTKR_AutoInvokeSkillPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        if (typeof Game_Actor.prototype.checkAutoSkill === 'function') {
+            Game_Actor.prototype.checkAutoSkill = wrapRaw(Game_Actor.prototype.checkAutoSkill);
+        }
+        if (typeof Game_Battler.prototype.checkAutoSkillAll === 'function') {
+            Game_Battler.prototype.checkAutoSkillAll = wrapRaw(Game_Battler.prototype.checkAutoSkillAll);
+        }
+        if (Imported.FTKR_SEP &&
+            typeof Game_Actor.prototype.setSepSkill === 'function'
+        ) {
+            Game_Actor.prototype.setSepSkill = wrapRaw(Game_Actor.prototype.setSepSkill);
+        }
+        Game_Actor._jtFTKR_AutoInvokeSkillPatched = true;
+    }
+
+    //FTKR_BattleAbortConditions.js
+    //1.0.0
+    //MV
+    function patch_FTKR_BattleAbortConditions() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_BAC ||
+            typeof FTKR === 'undefined' ||
+            typeof FTKR.evalFormula !== 'function' ||
+            typeof BattleManager.bacCheckAbort !== 'function' ||
+            BattleManager._jtFTKR_BattleAbortConditionsPatched
+        ) return;
+        BattleManager.bacCheckAbort = function () {
+            var c = $gamePlayer._battleAbortCondition;
+            if (!this.isBattleEnd() && c) {
+                if (TranslationManager.fetchRawData(function () {
+                    return FTKR.evalFormula(c.lose);
+                })) {
+                    this.processDefeat();
+                    return true;
+                } else if (TranslationManager.fetchRawData(function () {
+                    return FTKR.evalFormula(c.win);
+                })) {
+                    this.processVictory();
+                    return true;
+                }
+            }
+            return false;
+        };
+        BattleManager._jtFTKR_BattleAbortConditionsPatched = true;
+    }
+
+    //FTKR_BattleActionPoints.js
+    //1.1.0
+    //MV
+    function patch_FTKR_BattleActionPoints() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_BAP ||
+            typeof FTKR === 'undefined' ||
+            Game_Action._jtFTKR_BattleActionPointsPatched
+        ) return;
+        const _turnRAB = Game_Party.prototype.turnRefreshApBase;
+        Game_Party.prototype.turnRefreshApBase = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _turnRAB.apply(this, arguments);
+            })
+        }
+        Game_Action.prototype.applyItemPartyGainAp = function (target) {
+            const item = this.item();
+            if (!this.subject().isActor() || !item.gainAp) return;
+            FTKR.setGameData(this.subject(), target, item);
+            const passed = TranslationManager.fetchRawData(() => !item.gainApConditions || FTKR.evalFormula(item.gainApConditions));
+            if (passed) {
+                $gameParty.gainActionPoint(item.gainAp);
+                BattleManager._partyApWindow.refresh();
+            }
+        }
+        function rawDelta(arg) {
+            return TranslationManager.fetchRawData(() =>
+                TranslationManager.disablePluginTrans(() => {
+                    try {
+                        let text = arg == null ? '' : arg;
+                        const win =
+                            SceneManager._scene._windowLayer.children[0];
+
+                        if (win) {
+                            text = win.convertEscapeCharacters(text);
+                        }
+                        return Number(eval(text));
+                    } catch (e) {
+                        return 0;
+                    }
+                })
+            );
+        }
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            const key = command.toUpperCase();
+            const isMax =
+                key === 'FTKR_最大AP増加' ||
+                key === 'FTKR_ADD_MAX_AP';
+            const isCurrent =
+                key === 'FTKR_現在AP増加' ||
+                key === 'FTKR_ADD_CURRENT_AP';
+            if (!isMax && !isCurrent) {
+                return _pluginC.apply(this, arguments);
+            }
+            const ap = rawDelta(args[0]);
+            if (ap && $gameParty.inBattle()) {
+                if (isMax) {
+                    $gameParty.growActionPoint(ap);
+                } else {
+                    $gameParty.gainActionPoint(ap);
+                }
+                BattleManager._partyApWindow.refresh();
+            }
+        }
+        Game_Action._jtFTKR_BattleActionPointsPatched = true;
+    }
+
+    //FTKR_ConvertEscapeCharactersInScript.js
+    //1.0.1
+    //MV
+    function patch_FTKR_ConvertEscapeCharactersInScript() {
+        if (Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' || !Imported.FTKR_CEC ||
+            Game_Interpreter._jtFTKR_ConvertEscapeCharactersInScriptPatched) return;
+        function rawConversion(callback) {
+            return TranslationManager.fetchRawData(function () {
+                return TranslationManager.disablePluginTrans(callback);
+            });
+        }
+        function withNextRawConversion(callback) {
+            var scene = SceneManager._scene;
+            var layer = scene && scene._windowLayer;
+            var win = layer && layer.children[0];
+            if (!win) return callback();
+            var own = Object.getOwnPropertyDescriptor(
+                win, 'convertEscapeCharacters'
+            );
+            var original = win.convertEscapeCharacters;
+            function restore() {
+                if (win.convertEscapeCharacters !== once) return;
+                if (own) {
+                    Object.defineProperty(win, 'convertEscapeCharacters', own);
+                } else {
+                    delete win.convertEscapeCharacters;
+                }
+            }
+            function once() {
+                var receiver = this;
+                var args = arguments;
+                restore();
+                return rawConversion(function () {
+                    return original.apply(receiver, args);
+                });
+            }
+            Object.defineProperty(win, 'convertEscapeCharacters', {
+                configurable: true,
+                writable: true,
+                enumerable: own ? own.enumerable : false,
+                value: once
+            });
+            try {
+                return callback();
+            } finally {
+                restore();
+            }
+        }
+        var _setSC = Game_Interpreter.prototype.setScriptCodes;
+        Game_Interpreter.prototype.setScriptCodes = function () {
+            var self = this, args = arguments;
+            return rawConversion(function () {
+                return _setSC.apply(self, args);
+            });
+        };
+        function wrapNext(proto, name, condition) {
+            var original = proto[name];
+            proto[name] = function () {
+                if (!condition.apply(this, arguments)) {
+                    return original.apply(this, arguments);
+                }
+                var self = this, args = arguments;
+                return withNextRawConversion(function () {
+                    return original.apply(self, args);
+                });
+            };
+        }
+        wrapNext(Game_Interpreter.prototype, 'command111', function () {
+            return this._params[0] == 12;
+        });
+        wrapNext(Game_Interpreter.prototype, 'command122', function () {
+            return this._params[0] == 4;
+        });
+        wrapNext(Game_Character.prototype, 'processMoveCommand', function (command) {
+            return command.code == Game_Character.ROUTE_SCRIPT;
+        });
+        Game_Interpreter._jtFTKR_ConvertEscapeCharactersInScriptPatched = true;
+    }
+
+    //FTKR_CustomSimpleActorStatus.js
+    //3.5.3
+    //MV
+    function patch_FTKR_CustomSimpleActorStatus() {
+        if (Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' || !Imported.FTKR_CSS ||
+            typeof FTKR === 'undefined' || !FTKR.CSS ||
+            !FTKR.CSS.cssStatus || Window_Base._jtFTKR_CustomSimpleActorStatusPatched ||
+            typeof Window_Base.prototype.drawCssActorStatus !== 'function'
+        ) return;
+        function wrap(target, name, handler) {
+            const ori = target && target[name];
+            if (typeof ori !== 'function') return;
+            target[name] = function () {
+                return handler.call(this, ori, arguments);
+            }
+        }
+        [
+            'cssChangeCustomImage',
+            'cssChangeWindowSetting',
+            'cssChangeWindowSettingParam'
+        ].forEach(function (name) {
+            wrap(Game_Interpreter.prototype, name, function (original, args) {
+                return TranslationManager.fetchRawData(() =>
+                    TranslationManager.disablePluginTrans(() => original.apply(this, args))
+                );
+            });
+        });
+        wrap(Window_Base.prototype, 'convertTextWidth', function (original, args) {
+            const text = TranslationManager.translate(args[0]);
+            return TranslationManager.skipPluginTrans(() => original.call(this, text));
+        });
+        Window_Base.prototype.drawCssProfile = function (actor, x, y, width) {
+            this._setItem = actor.actor();
+            const text = TranslationManager.translate(actor.profile());
+            const lines = text.split('\n');
+            const dy = this.lineHeight();
+            lines.forEach(function (line, i) {
+                TranslationManager.skipPluginTrans(() =>
+                    this.drawTextEx(line, x, y + dy * i)
+                )
+            }, this);
+            return lines.length;
+        }
+        function _translateField(object, key) {
+            if (object && typeof object[key] === 'string') {
+                object[key] = TranslationManager.translate(object[key]);
+            }
+        }
+        const _css = FTKR.CSS.cssStatus;
+        _translateField(_css.message, 'levelUp');
+        [
+            'pdiff', 'ediff', 'aopdiff', 'ediffaop'
+        ].forEach(function (key) {
+            _translateField(_css[key], 'plus');
+            _translateField(_css[key], 'minus');
+        });
+        if (FTKR.CBR && FTKR.CBR.message) {
+            _translateField(FTKR.CBR.message, 'levelUp');
+            _translateField(FTKR.CBR.message, 'newSkill');
+        }
+        [
+            'drawCssActorMessage',
+            'drawCssActorMessageCBR',
+            'drawParamDiffValue'
+        ].forEach(function (name) {
+            wrap(Window_Base.prototype, name, function (original, args) {
+                return TranslationManager.skipPluginTrans(() => original.apply(this, args));
+            });
+        });
+        let cssDrawDepth = 0;
+        wrap(Window_Base.prototype, 'drawCssActorStatus', function (original, args) {
+            cssDrawDepth++;
+            try {
+                return original.apply(this, args);
+            } finally {
+                cssDrawDepth--;
+            }
+        });
+        ['evalFormula', 'evalStrFormula'].forEach(function (name) {
+            wrap(FTKR, name, function (original, args) {
+                return cssDrawDepth > 0
+                    ? TranslationManager.fetchRawData(() => original.apply(this, args))
+                    : original.apply(this, args);
+            });
+        });
+        Window_Base._jtFTKR_CustomSimpleActorStatusPatched = true;
+    }
+
+    //FTKR_CSS_CustomizeBattleResults.js
+    //2.1.4
+    //MV
+    function patch_FTKR_CSS_CustomizeBattleResults() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_CSS || !Imported.FTKR_CBR ||
+            typeof FTKR === 'undefined' ||
+            !FTKR.CBR || !FTKR.CBR.actor ||
+            typeof Window_BattleResultActor === 'undefined' ||
+            Window_BattleResultActor.FTKR_CSS_CustomizeBattleResultsPatched ||
+            typeof Window_BattleResultActor.prototype.displayMembers !== 'function'
+        ) return;
+        const _displayM = Window_BattleResultActor.prototype.displayMembers;
+        Window_BattleResultActor.prototype.displayMembers = function () {
+            const _type = FTKR.CBR.actor.memberType;
+            if (typeof _type === 'string') {
+                return TranslationManager.fetchRawData(() => {
+                    return _displayM.apply(this, arguments);
+                })
+            }
+            return _displayM.apply(this, arguments);
+        }
+        Window_BattleResultActor.FTKR_CSS_CustomizeBattleResultsPatched = true;
+    }
+
+    //FTKR_CSS_BattleStatus.js
+    //2.2.0
+    //MV
+    //also FTKR_CSS_DetailedStatus.js
+    //2.1.4
+    //also FTKR_CSS_MenuStatus.js
+    //2.1.3
+    //also FTKR_CSS_SkillStatus.js
+    //2.1.3
+    //also FTKR_CSS_ShopStatus.js
+    //2.3.0
+    function patch_FTKR_CSS_BattleStatus() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_CSS ||
+            (!Imported.FTKR_CSS_BS && !Imported.FTKR_CSS_DS && !Imported.FTKR_CSS_MS && !Imported.FTKR_CSS_SS && !Imported.FTKR_CSS_SpS) ||
+            Window_Base._jtFTKR_CSS_BattleStatusPatched ||
+            typeof Window_Base.prototype.drawCssActorStatus !== 'function'
+        ) return;
+        const _drawCAS = Window_Base.prototype.drawCssActorStatus;
+        const active = new WeakSet();
+        Window_Base.prototype.drawCssActorStatus = function () {
+            if (active.has(this)) {
+                return _drawCAS.apply(this, arguments);
+            }
+            const own = Object.getOwnPropertyDescriptor(this, 'drawTextEx');
+            const draw = this.drawTextEx;
+            if (typeof draw !== 'function' || (own && !own.configurable)) {
+                return _drawCAS.apply(this, arguments);
+            }
+            function _prepareDrawTextEx() {
+                const args = Array.prototype.slice.call(arguments);
+                if (
+                    TranslationManager._translatedSkipDepth > 0) {
+                    return draw.apply(this, args);
+                }
+                args[0] = TranslationManager.translate(args[0]);
+                return TranslationManager.skipPluginTrans(() => {
+                    return draw.apply(this, args);
+                })
+            }
+            Object.defineProperty(this, 'drawTextEx', {
+                configurable: true,
+                enumerable: own ? own.enumerable : false,
+                writable: true,
+                value: _prepareDrawTextEx
+            });
+            active.add(this);
+            try {
+                return _drawCAS.apply(this, arguments);
+            } finally {
+                active.delete(this);
+                if (own) {
+                    Object.defineProperty(this, 'drawTextEx', own);
+                } else {
+                    delete this.drawTextEx;
+                }
+            }
+        }
+        Window_Base._jtFTKR_CSS_BattleStatusPatched = true;
+    }
+
+    //FTKR_DamageFixedStates.js
+    //1.0.0
+    //MV
+    function patch_FTKR_DamageFixedStates() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_DFS ||
+            Game_BattlerBase._jtFTKR_DamageFixedStatesPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        if (typeof Game_BattlerBase.prototype.isDfsStateAffected === 'function') {
+            Game_BattlerBase.prototype.isDfsStateAffected = wrapRaw(Game_BattlerBase.prototype.isDfsStateAffected);
+        }
+        if (typeof Game_Actor.prototype.setSepSkill === 'function') {
+            Game_Actor.prototype.setSepSkill = wrapRaw(Game_Actor.prototype.setSepSkill);
+        }
+    }
+
+    //FTKR_ExBattleCommand.js
+    //2.2.2
+    //MV
+    function patch_FTKR_ExBattleCommand() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_EBC ||
+            Window_Command._jtFTKR_ExBattleCommandPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        if (typeof Window_Command.prototype.isEbcCommandEnabled === 'function') {
+            Window_Command.prototype.isEbcCommandEnabled = wrapRaw(Window_Command.prototype.isEbcCommandEnabled);
+        }
+        if (typeof Window_Command.prototype.isEbcCurrentItemEnabled === 'function') {
+            Window_Command.prototype.isEbcCurrentItemEnabled = wrapRaw(Window_Command.prototype.isEbcCurrentItemEnabled);
+        }
+        if (typeof Window_PartyCommand.prototype.includeEbc === 'function') {
+            Window_PartyCommand.prototype.includeEbc = wrapRaw(Window_PartyCommand.prototype.includeEbc);
+        }
+        const _updateESH = Window_Command.prototype.updateEbcSkillHelp;
+        if (typeof _updateESH === 'function') {
+            Window_Command.prototype.updateEbcSkillHelp = function () {
+                const item = this.currentEbcSkill();
+                const desc = item && item.description;
+                if (typeof desc === 'string' && desc) {
+                    TranslationManager._pushRecent(TranslationManager.translate(desc));
+                }
+                return _updateESH.apply(this, arguments);
+            }
+        }
+        Window_Command._jtFTKR_ExBattleCommandPatched = true;
+    }
+
+    //FTKR_ExBattleEvent.js
+    //1.3.6
+    //MV
+    function patch_FTKR_ExBattleEvent() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_EBE ||
+            Game_Troop._jtFTKR_ExBattleEventPatched ||
+            typeof Game_Troop.prototype.evalConditionsFormula !== 'function'
+        ) return;
+        const _evalCF = Game_Troop.prototype.evalConditionsFormula;
+        Game_Troop.prototype.evalConditionsFormula = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _evalCF.apply(this, arguments);
+            })
+        }
+        Game_Troop._jtFTKR_ExBattleEventPatched = true;
+    }
+
+    //FTKR_ExGuardEffect.js
+    //1.0.2
+    //MV
+    function patch_FTKR_ExGuardEffect() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_EGF ||
+            typeof Game_BattlerBase.prototype.traitsSumAllEval !== 'function' ||
+            Game_BattlerBase.FTKR_ExGuardEffectPatched
+        ) return;
+        const _traitsSAE = Game_BattlerBase.prototype.traitsSumAllEval;
+        Game_BattlerBase.prototype.traitsSumAllEval = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _traitsSAE.apply(this, arguments);
+            })
+        }
+        Game_BattlerBase.FTKR_ExGuardEffectPatched = true;
+    }
+
+    //FTKR_ExItemBox.js
+    //1.0.0
+    //MV
+    //also FTKR_ItemBoxCategory.js
+    //1.1.0
+    //MV
+    function patch_FTKR_ExItemBox() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' || (!Imported.FTKR_EIB && !Imported.FTKR_IBCt) ||
+            typeof FTKR === 'undefined' || (!FTKR.EIB && !FTKR.IBCt) ||
+            TextManager._jtFTKR_ExItemBoxPatched
+        ) return;
+        const _convertIC = TextManager.convertItemCategory;
+        TextManager.convertItemCategory = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _convertIC.apply(this, arguments);
+            })
+        }
+        TextManager._jtFTKR_ExItemBoxPatched = true;
+    }
+
+    //FTKR_ExItemConfig_Damage.js
+    //1.1.2
+    //MV
+    function patch_FTKR_ExItemConfig_Damage() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_EID ||
+            Game_Action._jtFTKR_ExItemConfig_DamagePatched
+        ) return;
+        const names = [
+            'evalDamagesEnabled',
+            'evalDamageFormula',
+            'itemDamageRate',
+            'itemDamageCriticalRate'
+        ];
+        names.forEach(function (name) {
+            if (typeof Game_Action.prototype[name] !== 'function') return;
+            const ori = Game_Action.prototype[name];
+            Game_Action.prototype[name] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                })
+            }
+        })
+        Game_Action._jtFTKR_ExItemConfig_DamagePatched = true;
+    }
+
+    //FTKR_ExItemConfig_Effect.js
+    //1.2.1
+    //MV
+    function patch_FTKR_ExItemConfig_Effect() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_EIE ||
+            Game_Action._jtFTKR_ExItemConfig_EffectPatched
+        ) return;
+        [
+            'evalEffectEnabled',
+            'setSepEffectValue1',
+            'setSepEffectValue2'
+        ].forEach(function (name) {
+            const original = Game_Action.prototype[name];
+            if (typeof original !== 'function') return;
+            Game_Action.prototype[name] = function () {
+                return TranslationManager.fetchRawData(function () {
+                    return original.apply(this, arguments);
+                });
+            };
+        });
+        Game_Action._jtFTKR_ExItemConfig_EffectPatched = true;
+    }
+
+    //FTKR_ExItemConfig_ItemBasic.js
+    //1.1.2
+    //MV
+    //also FTKR_ExItemConfig_IB_SkillCost.js
+    function patch_FTKR_ExItemConfig_ItemBasic() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' || !Imported.FTKR_IEP ||
+            DataManager._jtFTKR_ExItemConfig_ItemBasicPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        if (typeof DataManager.evalEnabledFormula === 'function') {
+            DataManager.evalEnabledFormula = wrapRaw(DataManager.evalEnabledFormula);
+        }
+        if (Imported.FTKR_IEP_SC && typeof Game_BattlerBase.prototype.skillIepCost === 'function') {
+            Game_BattlerBase.prototype.skillIepCost = wrapRaw(Game_BattlerBase.prototype.skillIepCost);
+        }
+        DataManager._jtFTKR_ExItemConfig_ItemBasicPatched = true;
+    }
+
+    //FTKR_ExItemConfig_Required.js
+    //1.0.3
+    //MV
+    function patch_FTKR_ExItemConfig_Required() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_EIR ||
+            typeof Game_Actor.prototype.evalEirFormula !== 'function' ||
+            Game_Actor._jtFTKR_ExItemConfig_RequiredPatched
+        ) return;
+        const _evalEF = Game_Actor.prototype.evalEirFormula;
+        Game_Actor.prototype.evalEirFormula = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _evalEF.apply(this, arguments);
+            })
+        }
+        Game_Actor._jtFTKR_ExItemConfig_RequiredPatched = true;
+    }
+
+    //FTKR_ExSvMotion.js
+    //1.4.0
+    //MV
+    function patch_FTKR_ExSvMotion() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_ESM ||
+            typeof Game_BattlerBase.prototype.evalEsmCondition !== 'function' ||
+            Game_BattlerBase._jtFTKR_ExSvMotionPatched
+        ) return;
+        const _evalEC = Game_BattlerBase.prototype.evalEsmCondition;
+        Game_BattlerBase.prototype.evalEsmCondition = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _evalEC.apply(this, arguments);
+            })
+        }
+        Game_BattlerBase._jtFTKR_ExSvMotionPatched = true;
+    }
+
+    //FTKR_ExVariablesChange.js
+    //1.2.4
+    //MV
+    function patch_FTKR_ExVariablesChange() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_EVC ||
+            typeof FTKR === 'undefined' ||
+            typeof FTKR.evalCalcFormula !== 'function' ||
+            FTKR._jtFTKR_ExVariablesChangePatched
+        ) return;
+        const _evalCF = FTKR.evalCalcFormula;
+        FTKR.evalCalcFormula = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _evalCF.apply(this, arguments);
+            })
+        }
+        FTKR._jtFTKR_ExVariablesChangePatched = true;
+    }
+
+    //FTKR_ExTraitSetting.js
+    //1.0.4
+    //MV
+    function patch_FTKR_ExTraitSetting() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_ETS ||
+            Game_BattlerBase._jtFTKR_ExTraitSettingPatched
+        ) return;
+        [
+            'traitsWithIdOperator',
+            'traitsEtsMultiDiv',
+            'traitsEtsMulti',
+            'traitsEtsDiv',
+            'traitsEtsMultiDivAll',
+            'traitsEtsMultiAll',
+            'traitsEtsDivAll',
+            'traitsEtsSum',
+            'traitsEtsSumAll'
+        ].forEach(function (name) {
+            if (typeof Game_BattlerBase.prototype[name] !== 'function') return;
+            const ori = Game_BattlerBase.prototype[name];
+            Game_BattlerBase.prototype[name] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                })
+            }
+        });
+        Game_BattlerBase._jtFTKR_ExTraitSettingPatched = true;
+    }
+
+    //FTKR_ItemCompositionSystem.js
+    //1.7.4
+    //MV
+    function patch_FTKR_ItemCompositionSystem() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_ICS ||
+            DataManager._jtFTKR_ItemCompositionSystemPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        const disablePluginTrans = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return fn.apply(this, arguments);
+                    })
+                })
+            }
+        }
+        DataManager.searchItemName = wrapRaw(DataManager.searchItemName);
+        DataManager.convertCategoryItem = wrapRaw(DataManager.convertCategoryItem);
+        Game_Interpreter.prototype.addRecipe = disablePluginTrans(Game_Interpreter.prototype.addRecipe);
+        Game_Interpreter.prototype.reduceRecipe = disablePluginTrans(Game_Interpreter.prototype.reduceRecipe);
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (/^ICS_(?:OPEN|合成画面表示)$/i.test(command)) {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _pluginC.apply(this, arguments);
+                    })
+                })
+            }
+            return _pluginC.apply(this, arguments);
+        }
+        const _installed = new WeakSet();
+        function _installIcsScene(proto) {
+            const _setIT = proto.setItemTraits;
+            proto.setItemTraits = function (...args) {
+                const target = args[0];
+                const source = this._compositionStateWindow._comp.slots[0].item();
+                TranslationManager.copyBoundFields(source, target);
+                const baseKey = source.compositCount ? 'baseName' : 'name';
+                const rawBase = TranslationManager.getRawData(source, baseKey);
+                const translatedBase = TranslationManager.translate(TranslationManager.getTranslatedData(source, baseKey));
+                const suffix = '(+' + target.compositCount + ')';
+                TranslationManager.setDataField(target, 'baseName', rawBase, translatedBase);
+                TranslationManager.setDataField(target, 'name', rawBase + suffix, translatedBase + suffix);
+                return _setIT.apply(this, args);
+            }
+        }
+        const _goto = SceneManager.goto;
+        SceneManager.goto = function (...args) {
+            const SceneClass = args[0];
+            const proto = SceneClass && SceneClass.prototype;
+            if (proto &&
+                typeof proto.createCompositionStateWindow === 'function' &&
+                typeof proto.createCompositionSlotWindow === 'function' &&
+                typeof proto.isSpecialComp === 'function' &&
+                typeof proto.setItemTraits === 'function' &&
+                !_installed.has(proto)) {
+                _installIcsScene(proto);
+                _installed.add(proto);
+            }
+            return _goto.apply(this, args);
+        }
+        const _saveKeys = [
+            'icsItemDatas',
+            'icsWeaponDatas',
+            'icsArmorDatas'
+        ];
+        const _makeSC = DataManager.makeSaveContents;
+        DataManager.makeSaveContents = function (...args) {
+            const contents = _makeSC.apply(this, args);
+            _saveKeys.forEach(function (key) {
+                if (contents[key]) {
+                    contents[key] = TranslationManager.fetchRawData(() => {
+                        return JsonEx.makeDeepCopy(contents[key]);
+                    })
+                }
+            });
+            return contents;
+        }
+        function _bindLoadedItem(item) {
+            if (!item) return;
+            const rawName = TranslationManager.getRawData(item, 'name');
+            [
+                'name',
+                'description',
+                'preName',
+                'preDescription',
+                'baseName'
+            ].forEach(function (key) {
+                if (typeof TranslationManager.getRawData(item, key) === 'string') {
+                    TranslationManager.translateDataField(item, key);
+                }
+            });
+            if (item.compositCount && typeof TranslationManager.getRawData(item, 'baseName') === 'string') {
+                const translatedName = TranslationManager.getTranslatedData(item, 'baseName') + '(+' + item.compositCount + ')';
+                TranslationManager.setDataField(
+                    item, 'name', rawName, translatedName
+                );
+            }
+        }
+        const _extractSC = DataManager.extractSaveContents;
+        DataManager.extractSaveContents = function (...args) {
+            const result = _extractSC.apply(this, args);
+            const contents = args[0];
+            _saveKeys.forEach(function (key) {
+                if (contents[key]) {
+                    contents[key].forEach(_bindLoadedItem);
+                }
+            })
+            return result;
+        }
+        DataManager._jtFTKR_ItemCompositionSystemPatched = true;
+    }
+
+    //FTKR_ItemSelfVariables.js
+    //1.2.2
+    //MV
+    function patch_FTKR_ItemSelfVariables() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' || !Imported.FTKR_ISV ||
+            typeof Game_IsvSelfVariables === 'undefined' ||
+            Game_IsvSelfVariables._jtFTKR_ItemSelfVariablesPatched
+        ) return;
+        ['evalFormula', 'evalCalcFormula'].forEach(function (name) {
+            const ori = FTKR[name];
+            if (typeof ori !== 'function') return;
+
+            FTKR[name] = function () {
+                return TranslationManager.fetchRawData(() =>
+                    ori.apply(this, arguments)
+                );
+            };
+        });
+        Game_IsvSelfVariables._jtFTKR_ItemSelfVariablesPatched = true;
+    }
+
+    //FTKR_ItemSubCommand.js
+    //1.7.3
+    //MV
+    function patch_FTKR_ItemSubCommand() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' || !Imported.FTKR_ISC ||
+            typeof FTKR === 'undefined' || !FTKR.ISC ||
+            typeof Window_ItemSubCommand === 'undefined' ||
+            Window_ItemSubCommand._jtFTKR_ItemSubCommandPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        ['isCustomShow', 'isCustomEnabled'].forEach(function (name) {
+            if (typeof Window_ItemSubCommand.prototype[name] !== 'function') return;
+            Window_ItemSubCommand.prototype[name] = wrapRaw(Window_ItemSubCommand.prototype[name]);
+        });
+        Window_ItemSubCommand._jtFTKR_ItemSubCommandPatched = true;
+    }
+
+    //FTKR_PopupSpriteMessage.js
+    //1.2.5
+    //MV
+    function patch_FTKR_PopupSpriteMessage() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_PSM ||
+            Game_Interpreter._jtFTKR_PopupSpriteMessagePatched ||
+            typeof Game_Interpreter.prototype.setupRotateMessage !== 'function' ||
+            typeof Spriteset_Base.prototype.createPopupMessages !== 'function'
+        ) return;
+        const _setRM = Game_Interpreter.prototype.setupRotateMessage;
+        Game_Interpreter.prototype.setupRotateMessage = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _setRM.apply(this, arguments);
+                })
+            })
+        }
+        const patchedPrototypes = new WeakSet();
+        function patchSprite(sprite) {
+            if (!sprite) return;
+            const proto = Object.getPrototypeOf(sprite);
+            if (
+                !proto || patchedPrototypes.has(proto) ||
+                typeof proto.getTextWidth !== 'function' ||
+                typeof proto.setupSprite !== 'function'
+            ) return;
+            ['getTextWidth', 'setupSprite'].forEach(function (name) {
+                const ori = proto[name];
+                proto[name] = function () {
+                    return TranslationManager.skipPluginTrans(() => {
+                        return ori.apply(this, arguments);
+                    })
+                }
+            });
+            patchedPrototypes.add(proto);
+        }
+        const _createPM = Spriteset_Base.prototype.createPopupMessages;
+        Spriteset_Base.prototype.createPopupMessages = function () {
+            const result = _createPM.apply(this, arguments);
+            if (Array.isArray(this._ftPopupMessages)) {
+                this._ftPopupMessages.forEach(patchSprite);
+            }
+            return result;
+        }
+        if (
+            Imported.FTKR_ISV &&
+            typeof Game_IsvSelfVariables !== 'undefined' &&
+            typeof Game_IsvSelfVariables.prototype.value === 'function'
+        ) {
+            let _displayConversionDepth = 0;
+            const _setPM = Game_Party.prototype.setPopupMessage;
+            Game_Party.prototype.setPopupMessage = function () {
+                _displayConversionDepth++;
+                try {
+                    return _setPM.apply(this, arguments);
+                } finally {
+                    _displayConversionDepth--;
+                }
+            };
+            const _selfVariableValue = Game_IsvSelfVariables.prototype.value;
+            Game_IsvSelfVariables.prototype.value = function () {
+                const value = _selfVariableValue.apply(this, arguments);
+                if (_displayConversionDepth > 0 && typeof value === 'string') {
+                    return TranslationManager.translate(value);
+                }
+                return value;
+            }
+        }
+        Game_Interpreter._jtFTKR_PopupSpriteMessagePatched = true;
+    }
+
+    //FTKR_OriginalSceneWindow.js
+    //1.7.1
+    //MV
+    function patch_FTKR_OriginalSceneWindow() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_OSW ||
+            typeof Game_OswBase === 'undefined' ||
+            typeof Game_OswCommand === 'undefined' ||
+            typeof Game_OswCommon === 'undefined' ||
+            typeof Game_OswSelectable === 'undefined' ||
+            Game_Interpreter._jtFTKR_OriginalSceneWindowPatched
+        ) return;
+        function rawLogic(callback) {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(callback);
+            })
+        }
+        function wrapper(target, name, disableTransSwitch) {
+            const ori = target[name];
+            if (typeof ori !== 'function') return;
+            target[name] = function () {
+                const invoke = () => ori.apply(this, arguments);
+                return disableTransSwitch ? rawLogic(invoke) : TranslationManager.fetchRawData(invoke);
+            }
+        }
+        [
+            'gameData',
+            'setOswWindowParam',
+            'createOswList',
+            'setOswWindowArgs',
+            'setOswCommandArgs',
+            'setOswCommandCancel',
+            'setOswMethod',
+            'setOswContentArgs',
+            'setOswStatusListContentArgs',
+            'setOswSelectArgs',
+            'setOswSelectList'
+        ].forEach(function (name) {
+            wrapper(Game_Interpreter.prototype, name, true);
+        });
+        const _commandPrototypes = new WeakSet();
+        const _commonPrototypes = new WeakSet();
+        const _selectPrototypes = new WeakSet();
+        function _installCommand(proto) {
+            if (_commandPrototypes.has(proto)) return;
+            proto.makeCommandList = function () {
+                this._window._list.forEach(function (cmd) {
+                    var enabled = rawLogic(() => eval(this.convertEscapeCharacters(cmd.enabled)));
+                    this.addCommand(cmd.name, cmd.symbol, enabled);
+                }, this);
+            }
+            wrapper(proto, 'setMethodHandler', false);
+            _commandPrototypes.add(proto);
+        }
+        function _installCommon(proto) {
+            if (_commonPrototypes.has(proto)) return;
+            wrapper(proto, 'evalCssCustomFormula', false);
+            wrapper(proto, 'evalCssStrFormula', false);
+            _commonPrototypes.add(proto);
+        }
+        function _installSelect(proto) {
+            if (_selectPrototypes.has(proto)) return;
+            wrapper(proto, 'makeItemList', false);
+            wrapper(proto, 'isEnabled', false);
+            wrapper(proto, 'setMethodHandler', false);
+            wrapper(proto, 'evalCssCustomFormula', false);
+            wrapper(proto, 'evalCssStrFormula', false);
+            _selectPrototypes.add(proto);
+        }
+        function _observeCreation(name, baseProto, configurationClass, install) {
+            const _create = Scene_Base.prototype[name];
+            if (typeof _create !== 'function') return;
+            Scene_Base.prototype[name] = function () {
+                const own = Object.getOwnPropertyDescriptor(baseProto, 'initialize');
+                const _initialize = baseProto.initialize;
+                function observedInitialize() {
+                    if (this._window instanceof configurationClass) {
+                        install(Object.getPrototypeOf(this));
+                    }
+                    return _initialize.apply(this, arguments);
+                }
+                Object.defineProperty(baseProto, 'initialize', {
+                    configurable: true,
+                    writable: true,
+                    enumerable: own ? own.enumerable : false,
+                    value: observedInitialize
+                });
+                try { return _create.apply(this, arguments) } finally {
+                    if (own) {
+                        Object.defineProperty(baseProto, 'initialize', own);
+                    } else {
+                        delete baseProto.initialize;
+                    }
+                }
+            }
+        }
+        _observeCreation(
+            'createCommandWindow',
+            Window_Command.prototype,
+            Game_OswCommand,
+            _installCommand
+        );
+        _observeCreation(
+            'createCommonWindow',
+            Window_Base.prototype,
+            Game_OswCommon,
+            _installCommon
+        );
+        _observeCreation(
+            'createSelectWindow',
+            Window_Selectable.prototype,
+            Game_OswSelectable,
+            _installSelect
+        );
+        Game_Interpreter._jtFTKR_OriginalSceneWindowPatched = true;
+    }
+
+    //FTKR_SetupTroops.js
+    //1.1.0
+    //MV
+    function patch_FTKR_SetupTroops() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_STP ||
+            typeof Game_Interpreter.prototype.setArgNumber !== 'function' ||
+            Game_Interpreter._jtFTKR_SetupTroopsPatched
+        ) return;
+        const _setAN = Game_Interpreter.prototype.setArgNumber;
+        Game_Interpreter.prototype.setArgNumber = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _setAN.apply(this, arguments);
+                })
+            })
+        }
+        Game_Interpreter._jtFTKR_SetupTroopsPatched = true;
+    }
+
+    //FTKR_SEP_ShowSkillStatus.js
+    //1.4.7
+    //MV
+    function patch_FTKR_SEP_ShowSkillStatus() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_SEP ||
+            !Imported.FTKR_SSS ||
+            typeof FTKR === 'undefined' ||
+            !FTKR.SSS ||
+            !FTKR.SSS.parameters ||
+            typeof Window_Base.prototype.drawFormatText !== 'function' ||
+            typeof Window_Base.prototype.drawDescription !== 'function' ||
+            typeof Window_Base.prototype.getDesc !== 'function' ||
+            Window_Base._jtFTKR_SEP_ShowSkillStatusPatched
+        ) return;
+        const _drawFT = Window_Base.prototype.drawFormatText;
+        Window_Base.prototype.drawFormatText = function (format, x, y, params, width, height) {
+            if (TranslationManager._translatedSkipDepth > 0) {
+                return _drawFT.apply(this, arguments);
+            }
+            const formatTranslated = TranslationManager.translate(format);
+            const paramsTranslated = Array.isArray(params) ? params.map(function (value) {
+                return typeof value === 'string' ? TranslationManager.translate(value) : value;
+            }) : params;
+            return TranslationManager.skipPluginTrans(() => {
+                return _drawFT.call(
+                    this,
+                    formatTranslated, x, y, paramsTranslated, width, height
+                )
+            })
+        };
+        Window_Base.prototype.drawDescription = function (x, y, width, skill) {
+            const diff = this.diffPadding();
+            const desc = TranslationManager.translate(this.getDesc(skill));
+            const lines = desc.split('\n');
+            const lineHeight = this.lineHeight();
+            return TranslationManager.skipPluginTrans(() => {
+                lines.forEach((line, index) => {
+                    this.drawFormatText(line, x + diff, y + diff + lineHeight * index, [], width * 0.95);
+                })
+            })
+        };
+        Window_Base._jtFTKR_SEP_ShowSkillStatusPatched = true;
+    }
+
+    //FTKR_ShowPictureBalloon.js
+    //1.0.0
+    //MV
+    function patch_FTKR_ShowPictureBalloon() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_SPB ||
+            typeof Game_Interpreter.prototype.setupPictureBalloon !== 'function' ||
+            Game_Interpreter._jtFTKR_ShowPictureBalloonPatched
+        ) return;
+        const _setupPB = Game_Interpreter.prototype.setupPictureBalloon;
+        Game_Interpreter.prototype.setupPictureBalloon = function () {
+            return TranslationManager.disablePluginTrans(() => {
+                return _setupPB.apply(this, arguments);
+            })
+        }
+        Game_Interpreter._jtFTKR_ShowPictureBalloonPatched = true;
+    }
+
+    //FTKR_SkillCounter.js
+    //1.0.6
+    //MV
+    function patch_FTKR_SkillCounter() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_SCT ||
+            typeof DataManager.evalSctFormula !== 'function' ||
+            DataManager._jtFTKR_SkillCounterPatched
+        ) return;
+        const _evalSF = DataManager.evalSctFormula;
+        DataManager.evalSctFormula = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _evalSF.apply(this, arguments);
+            })
+        }
+        DataManager._jtFTKR_SkillCounterPatched = true;
+    }
+
+    //FTKR_SkillSubCommand.js
+    //1.0.0
+    //MV
+    function patch_FTKR_SkillSubCommand() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.FTKR_SSC ||
+            typeof Game_Actor.prototype.evalSscFormula !== 'function' ||
+            Game_Actor._jtFTKR_SkillSubCommandPatched
+        ) return;
+        const _evalSF = Game_Actor.prototype.evalSscFormula;
+        Game_Actor.prototype.evalSscFormula = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _evalSF.apply(this, arguments);
+            })
+        }
+        Game_Actor._jtFTKR_SkillSubCommandPatched = true;
+    }
+
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -7054,6 +8340,10 @@
     //1.4.1
     //MV
     //discard
+
+    //FTKR_SkillExpansion.js
+    //MV
+    //no usage example using skill name/desc in logic so leave as is
 
     //#endregion
 
@@ -7227,6 +8517,38 @@
         patch_YEP_X_ItemRequirements();
         patch_YEP_X_EquipSkillTiers();
         patch_YEP_KeyboardConfig();
+        patch_FTKR_AddRoutineMoveCommands();
+        patch_FTKR_AISkillEvaluate();
+        patch_FTKR_AutoStateConditions();
+        patch_FTKR_AutoInvokeSkill();
+        patch_FTKR_BattleAbortConditions();
+        patch_FTKR_BattleActionPoints();
+        patch_FTKR_ConvertEscapeCharactersInScript();
+        patch_FTKR_CustomSimpleActorStatus();
+        patch_FTKR_CSS_CustomizeBattleResults();
+        patch_FTKR_CSS_BattleStatus();
+        patch_FTKR_DamageFixedStates();
+        patch_FTKR_ExBattleCommand();
+        patch_FTKR_ExBattleEvent();
+        patch_FTKR_ExGuardEffect();
+        patch_FTKR_ExItemBox();
+        patch_FTKR_ExItemConfig_Damage();
+        patch_FTKR_ExItemConfig_Effect();
+        patch_FTKR_ExItemConfig_ItemBasic();
+        patch_FTKR_ExItemConfig_Required()
+        patch_FTKR_ExSvMotion();
+        patch_FTKR_ExVariablesChange();
+        patch_FTKR_ExTraitSetting();
+        patch_FTKR_ItemCompositionSystem();
+        patch_FTKR_ItemSelfVariables()
+        patch_FTKR_ItemSubCommand();
+        patch_FTKR_PopupSpriteMessage();
+        patch_FTKR_OriginalSceneWindow();
+        patch_FTKR_SetupTroops();
+        patch_FTKR_SEP_ShowSkillStatus();
+        patch_FTKR_ShowPictureBalloon();
+        patch_FTKR_SkillCounter();
+        patch_FTKR_SkillSubCommand();
     };
     //#endregion
 
