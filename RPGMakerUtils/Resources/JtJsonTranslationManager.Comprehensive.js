@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.7.05.32 FTKR MV plugins support
+ * @patch ver 0.8.05.6 DarkPlasma MV plugins support
+ *        ver 0.7.05.32 FTKR MV plugins support
  *        ver 0.6.05.16 YEP MV plugins support
  *        ver 0.5.05.5 tomoaky MV plugins support
  *        ver 0.4.10.11 MOG plugins primary support
@@ -7495,6 +7496,7 @@
         if (typeof Game_Actor.prototype.setSepSkill === 'function') {
             Game_Actor.prototype.setSepSkill = wrapRaw(Game_Actor.prototype.setSepSkill);
         }
+        Game_BattlerBase._jtFTKR_DamageFixedStatesPatched = true;
     }
 
     //FTKR_ExBattleCommand.js
@@ -8266,6 +8268,263 @@
         Game_Actor._jtFTKR_SkillSubCommandPatched = true;
     }
 
+    //DarkPlasma_ConcurrentParty.js
+    //1.3.0
+    //MV
+    function patch_DarkPlasma_ConcurrentParty() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_Party.prototype.createDevidedParty !== 'function' ||
+            typeof Game_Party.prototype.devidedParties !== 'function' ||
+            Game_Interpreter._jtDarkPlasma_ConcurrentPartyPatched
+        ) return;
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (command === 'createParty') {
+                return TranslationManager.fetchRawData(() => {
+                    return _pluginC.apply(this, arguments);
+                })
+            }
+            return _pluginC.apply(this, arguments);
+        }
+        Game_Interpreter._jtDarkPlasma_ConcurrentPartyPatched = true;
+    }
+
+    //DarkPlasma_LicenseManager.js
+    //3.0.0
+    //MV
+    function patch_DarkPlasma_LicenseManager() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Scene_License === 'undefined' ||
+            typeof Scene_License.prototype.createLicenseWindows !== 'function' ||
+            Scene_License._jtDarkPlasma_LicenseManagerPatched
+        ) return;
+        const _patchedWindow = new WeakSet();
+        const _createLW = Scene_License.prototype.createLicenseWindows;
+        Scene_License.prototype.createLicenseWindows = function () {
+            const _initialize = Window_Command.prototype.initialize;
+            Window_Command.prototype.initialize = function () {
+                if (!_patchedWindow.has(this)) {
+                    const _addC = this.addCommand;
+                    this.addCommand = function (name, symbol) {
+                        if (symbol === 'author') {
+                            return TranslationManager.disablePluginTrans(() => {
+                                return _addC.apply(this, arguments);
+                            })
+                        }
+                        return _addC.apply(this, arguments);
+                    }
+                    _patchedWindow.add(this);
+                }
+                return _initialize.apply(this, arguments);
+            };
+            try {
+                return _createLW.apply(this, arguments);
+            } finally {
+                Window_Command.prototype.initialize = _initialize;
+            }
+        };
+        Scene_License._jtDarkPlasma_LicenseManagerPatched = true;
+    }
+
+    //DarkPlasma_NameWindow.js
+    //2.1.1
+    //MV
+    //autoDetectName can still be problematic
+    function patch_DarkPlasma_NameWindow() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Window_Message.prototype.findNameWindowTextInfo !== 'function' ||
+            typeof Window_Message.prototype.convertNameWindow !== 'function' ||
+            typeof Game_Actors.prototype.byName !== 'function' ||
+            Window_Message._jtDarkPlasma_NameWindowPatched
+        ) return;
+        const rawLogic = callback =>
+            TranslationManager.fetchRawData(() =>
+                TranslationManager.disablePluginTrans(callback)
+            );
+        const _byName = Game_Actors.prototype.byName;
+        Game_Actors.prototype.byName = function (name) {
+            return rawLogic(() => _byName.call(this, name));
+        }
+        const _findNWTI = Window_Message.prototype.findNameWindowTextInfo;
+        const infosPatched = new WeakSet();
+        Window_Message.prototype.findNameWindowTextInfo = function (text) {
+            const info = rawLogic(() => _findNWTI.call(this, text));
+            if (!info || infosPatched.has(info)) return info;
+            infosPatched.add(info);
+            const _coloredName = info.coloredName;
+            info.coloredName = function () {
+                const source = rawLogic(() => _coloredName.call(this));
+                if (TranslationManager._translationDisableDepth > 0 || TranslationManager.isRawData()) {
+                    return source;
+                }
+                return TranslationManager.translate(source);
+            }
+            return info;
+        }
+        const _CEC = Window_Message.prototype.convertEscapeCharacters
+        Window_Message.prototype.convertEscapeCharacters = function (text) {
+            if (
+                TranslationManager._translationDisableDepth > 0 ||
+                TranslationManager._translatedSkipDepth > 0 ||
+                TranslationManager.isRawData()
+            ) return _CEC.apply(this, arguments);
+            const body = rawLogic(() => _CEC.apply(this, arguments));
+            const source = body.replace(/\\/g, '\\\\').replace(/\x1b/g, '\\');
+            const translated = TranslationManager.translate(source);
+            const converted = TranslationManager.skipPluginTrans(() => {
+                return Window_Base.prototype.convertEscapeCharacters.call(this, translated);
+            });
+            TranslationManager.pushConvertedText(converted);
+            TranslationManager._pushRecent(converted);
+            return converted;
+        }
+        const _createSW = Window_Message.prototype.createSubWindows;
+        Window_Message.prototype.createSubWindows = function () {
+            const result = _createSW.apply(this, arguments);
+            const nameWindow = this._nameWindow;
+            if (nameWindow && !nameWindow._jtNameWindowDrawPatched) {
+                const _drawTE = nameWindow.drawTextEx;
+                nameWindow.drawTextEx = function () {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _drawTE.apply(this, arguments);
+                    })
+                };
+                nameWindow._jtNameWindowDrawPatched = true;
+            }
+            return result;
+        }
+        Window_Message._jtDarkPlasma_NameWindowPatched = true;
+    }
+
+    //DarkPlasma_AutoLineBreak.js
+    //1.0.1
+    //MV
+    function patch_DarkPlasma_AutoLineBreak() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Window_Base.prototype.textWidthExCheck !== 'function' ||
+            typeof Window_Base.prototype.mustLineBreak !== 'function' ||
+            typeof Window_Base.prototype.isAutoLineBreakEnabled !== 'function' ||
+            Window_Base.DarkPlasma_AutoLineBreakPatched
+        ) return;
+        const _textWEC = Window_Base.prototype.textWidthExCheck;
+        Window_Base.prototype.textWidthExCheck = function () {
+            return TranslationManager.disablePluginTrans(() => {
+                return _textWEC.apply(this, arguments);
+            })
+        };
+        const _processNC = Window_Base.prototype.processNormalCharacter;
+        Window_Base.prototype.processNormalCharacter = function () {
+            if (!this.isAutoLineBreakEnabled()) {
+                return _processNC.apply(this, arguments);
+            }
+            return TranslationManager.disablePluginTrans(() => {
+                return _processNC.apply(this, arguments);
+            })
+        };
+        Window_Base.DarkPlasma_AutoLineBreakPatched = true;
+    }
+
+    //DarkPlasma_TextLog.js
+    //3.2.0
+    //MV
+    function patch_DarkPlasma_TextLog() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_EventTextLog === 'undefined' ||
+            typeof Window_TextLog === 'undefined' ||
+            Game_EventTextLog._jtDarkPlasma_TextLogPatched
+        ) return;
+        const parameters = PluginManager.parameters('DarkPlasma_TextLog');
+        const choiceFormat = String(parameters.choiceFormat || '選択肢:{choice}');
+        const choiceCancelText = String(parameters.choiceCancelText || 'キャンセル');
+        const choiceColor = Number(parameters.choiceColor || 17);
+        const _transforms = [];
+        function withLogTransform(transform, callback) {
+            _transforms.push(transform);
+            try {
+                return callback();
+            } finally {
+                _transforms.pop();
+            }
+        }
+        function translateChoiceFormat() {
+            const ranges = [];
+            const pattern = /{choice}/gi;
+            let match;
+            while ((match = pattern.exec(choiceFormat))) {
+                ranges.push([match.index, pattern.lastIndex]);
+            }
+            //if choice format preserved through trans, proceed
+            const translated = TranslationManager.translate(choiceFormat);
+            if ((translated.match(/{choice}/gi) || []).length === ranges.length) {
+                return translated;
+            }
+            return ranges.length ? TranslationManager.translate(choiceFormat, true, Infinity, true, ranges) : choiceFormat;
+        }
+        const _logProto = Game_EventTextLog.prototype;
+        const _addML = _logProto.addMessageLog;
+        _logProto.addMessageLog = function (text) {
+            const transform = _transforms[_transforms.length - 1];
+            const displayText = transform ? transform(text) : TranslationManager.translate(text);
+            return _addML.call(this, displayText);
+        }
+        [
+            Window_Message.prototype,
+            Window_ScrollText.prototype
+        ].forEach(prototype => {
+            const _terminateMsg = prototype.terminateMessage;
+            prototype.terminateMessage = function () {
+                return withLogTransform(text => text, () => _terminateMsg.apply(this, arguments));
+            }
+        });
+        const _addTL = Window_ChoiceList.prototype.addToLog;
+        Window_ChoiceList.prototype.addToLog = function () {
+            return withLogTransform(() => {
+                const chosenIndex = $gameMessage.chosenIndex();
+                const choices = $gameMessage.choices();
+                const cancelled = chosenIndex === $gameMessage.choiceCancelType() && (chosenIndex < 0 || choices.length <= chosenIndex);
+                const text = cancelled ? choiceCancelText : choices[chosenIndex];
+                return translateChoiceFormat().replace(/{choice}/gi, '\x1bC[' + choiceColor + ']' + TranslationManager.translate(text) + '\x1bC[0]');
+            }, () => _addTL.apply(this, arguments));
+        }
+        const _windowPrototype = Window_TextLog.prototype;
+        ['calcMessageHeight', 'drawTextEx'].forEach(method => {
+            const _method = _windowPrototype[method];
+            _windowPrototype[method] = function () {
+                return TranslationManager.skipPluginTrans(() => {
+                    return _method.apply(this, arguments);
+                })
+            }
+        });
+        Game_EventTextLog._jtDarkPlasma_TextLogPatched = true;
+    }
+
+    //DarkPlasma_SkillDetail.js
+    //2.0.2
+    //MV
+    //for repeated trans
+    function patch_DarkPlasma_SkillDetail() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Window_SkillDetail === 'undefined' ||
+            typeof Window_SkillDetail.prototype.processCharacter !== 'function' ||
+            Window_SkillDetail._jtDarkPlasma_SkillDetailPatched
+        ) return;
+        const _processC = Window_SkillDetail.prototype.processCharacter;
+        Window_SkillDetail.prototype.processCharacter = function () {
+            return TranslationManager.disablePluginTrans(() => {
+                return _processC.apply(this, arguments);
+            })
+        }
+        Window_SkillDetail._jtDarkPlasma_SkillDetailPatched = true;
+    }
+
+    //#endregion
+    //#region record only plugins
     //DestinationWindow.js
     //1.7.0
     //MV
@@ -8344,6 +8603,16 @@
     //FTKR_SkillExpansion.js
     //MV
     //no usage example using skill name/desc in logic so leave as is
+
+    //DarkPlasma_AutoHighlight.js
+    //2.0.2
+    //MV
+    //ll have to hijack its loading n reimplement its logic 
+    //but losing text highlight wont hurt much in most cases ig
+
+    //DarkPlasma_SimpleQuest.js
+    //1.2.0
+    //idk how \n gonna be handled by mtool
 
     //#endregion
 
@@ -8549,6 +8818,12 @@
         patch_FTKR_ShowPictureBalloon();
         patch_FTKR_SkillCounter();
         patch_FTKR_SkillSubCommand();
+        patch_DarkPlasma_ConcurrentParty();
+        patch_DarkPlasma_LicenseManager();
+        patch_DarkPlasma_NameWindow();
+        patch_DarkPlasma_AutoLineBreak();
+        patch_DarkPlasma_TextLog();
+        patch_DarkPlasma_SkillDetail();
     };
     //#endregion
 
