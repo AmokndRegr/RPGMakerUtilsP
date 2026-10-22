@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.8.10.14 DarkPlasma plugins primary support
+ * @patch ver 0.9.05.1 Torigoya MZ plugins primary support
+ *        ver 0.8.10.14 DarkPlasma plugins primary support
  *        ver 0.7.05.32 FTKR MV plugins support
  *        ver 0.6.05.16 YEP MV plugins support
  *        ver 0.5.05.5 tomoaky MV plugins support
@@ -8925,6 +8926,79 @@
         Window_PartyCommand._jtDarkPlasma_FormationInBattlePatched = true;
     }
 
+    //TorigoyaMZ_Bookshelf.js
+    //1.2.2
+    //MZ
+    //full page in one CEC call from Window_BookContent.drawItem
+    //hope nobody d use /V[n] or /N[n] in file name
+    function patch_TorigoyaMZ_Bookshelf() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Torigoya === 'undefined' ||
+            !Torigoya.Bookshelf ||
+            !Torigoya.Bookshelf.Window_BookContent ||
+            Torigoya._jtTorigoyaMZ_BookshelfPatched
+        ) return;
+        const _prototype = Torigoya.Bookshelf.Window_BookContent.prototype;
+        let bookshelfMaskDepth = 0;
+        function _collectImageMask(text) {
+            const masks = [];
+            let index = 0;
+            while (index < text.length) {
+                const character = text[index];
+                if (character !== '\\' && character !== '\x1b') {
+                    index++;
+                    continue;
+                }
+                const nextCharacter = text[index + 1];
+                if (nextCharacter === '\\' || nextCharacter === '\x1b') {
+                    index += 2;
+                    continue;
+                }
+                const code = /^[A-Z]+/i.exec(text.slice(index + 1));
+                if (!code) { index++; continue; }
+                const name = code[0].toUpperCase();
+                if (name !== 'BOOKFACE' && name !== 'BOOKPICTURE') {
+                    index += code[0].length + 1;
+                    continue;
+                }
+                const lineEnd = text.indexOf('\n', index);
+                const end = lineEnd < 0 ? text.length : lineEnd;
+                masks.push([index, end]);
+                index = end;
+            }
+            return masks;
+        };
+        const _translate = TranslationManager.translate;
+        TranslationManager.translate = function (text, detectStartWhitespace, times, cache, mask) {
+            if (bookshelfMaskDepth > 0 && typeof text === 'string') {
+                const imageMasks = _collectImageMask(text);
+                if (imageMasks.length > 0) {
+                    const args = Array.prototype.slice.call(arguments);
+                    args[4] = (mask == null ? [] : mask).concat(imageMasks);
+                    return _translate.apply(this, args);
+                }
+            }
+            return _translate.apply(this, arguments);
+        };
+        const _CEC = _prototype.convertEscapeCharacters;
+        _prototype.convertEscapeCharacters = function () {
+            bookshelfMaskDepth++;
+            try {
+                return _CEC.apply(this, arguments);
+            } finally {
+                bookshelfMaskDepth--;
+            }
+        };
+        const _flushTS = _prototype.flushTextState;
+        _prototype.flushTextState = function () {
+            return TranslationManager.skipPluginTrans(() => {
+                return _flushTS.apply(this, arguments);
+            })
+        };
+        Torigoya._jtTorigoyaMZ_BookshelfPatched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -9020,6 +9094,11 @@
     //3.2.0
     //MZ
     //dunno how mtool handle its message, plus object not exposed, discard fn
+
+    //TorigoyaMZ_ActorEnemy.js
+    //0.2.1
+    //MZ
+    //wont break the game w/o patch ig
 
     //#endregion
 
@@ -9239,6 +9318,7 @@
         patch_DarkPlasma_DisplayDatabaseDetailWindow();
         patch_DarkPlasma_ChoiceExtension();
         patch_DarkPlasma_FormationInBattle();
+        patch_TorigoyaMZ_Bookshelf();
     };
     //#endregion
 
