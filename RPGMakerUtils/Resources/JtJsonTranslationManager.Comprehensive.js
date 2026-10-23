@@ -2,7 +2,7 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.9.05.1 Torigoya MZ plugins primary support
+ * @patch ver 0.9.10.5 Torigoya plugins primary support
  *        ver 0.8.10.14 DarkPlasma plugins primary support
  *        ver 0.7.05.32 FTKR MV plugins support
  *        ver 0.6.05.16 YEP MV plugins support
@@ -11,7 +11,7 @@
  *        ver 0.3.10.2 MKR plugins primary support
  *        ver 0.2.10.5 munokura plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
- * @memo    1. Game_Message.newPage might introduce repeated trans.
+ * @memo    1. Game_Message.newPage rarely used, discard.
  *          2. WishListForFusionItem n NotifyWishList from DarkPlasma may need rework after Torigoya patch.
  *
  * @help
@@ -8999,6 +8999,201 @@
         Torigoya._jtTorigoyaMZ_BookshelfPatched = true;
     }
 
+    //Torigoya_Bookshelf.js
+    //1.2.2
+    //MV
+    function patch_Torigoya_Bookshelf() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Torigoya === 'undefined' ||
+            !Torigoya.Bookshelf ||
+            !Torigoya.Bookshelf.Window_BooksList ||
+            !Torigoya.Bookshelf.Window_BookContent ||
+            Torigoya._jtTorigoya_BookshelfPatched
+        ) return;
+        const _makeIL = Torigoya.Bookshelf.Window_BooksList.prototype.makeItemList;
+        Torigoya.Bookshelf.Window_BooksList.prototype.makeItemList = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _makeIL.apply(this, arguments);
+                })
+            })
+        };
+        function _collectImageRanges(text) {
+            const ranges = [];
+            let index = 0;
+            while (index < text.length) {
+                const character = text[index];
+                if (character !== '\\' && character !== '\x1b') {
+                    index++;
+                    continue;
+                }
+                const nextCharacter = text[index + 1];
+                if (nextCharacter === '\\' || nextCharacter === '\x1b') {
+                    index += 2;
+                    continue;
+                }
+                const code = /^[A-Z]+/i.exec(text.slice(index + 1));
+                if (!code) {
+                    index++;
+                    continue;
+                }
+                if (!/^BOOK(?:FACE|PICTURE)$/i.test(code[0])) {
+                    index += code[0].length + 1;
+                    continue;
+                }
+                const lineEnd = text.indexOf('\n', index);
+                const end = lineEnd < 0 ? text.length : lineEnd;
+                ranges.push([index, end]);
+                index = end;
+            }
+            return ranges;
+        };
+        function _translatePage(text) {
+            const imageMasks = _collectImageRanges(text);
+            if (!imageMasks.length) {
+                return TranslationManager.translate(text);
+            }
+            return TranslationManager.translate(text, true, Infinity, true, imageMasks);
+        };
+        const _CEC = Torigoya.Bookshelf.Window_BookContent.prototype.convertEscapeCharacters;
+        Torigoya.Bookshelf.Window_BookContent.prototype.convertEscapeCharacters = function (text) {
+            if (
+                typeof text !== 'string' ||
+                TranslationManager._translationDisableDepth > 0 ||
+                TranslationManager._translatedSkipDepth > 0
+            ) {
+                return _CEC.apply(this, arguments);
+            }
+            //could be risky but give it a try
+            const translated = _translatePage(text);
+            const ranges = _collectImageRanges(translated);
+            const result = [];
+            let offset = 0;
+            const _convertDisplayText = part => {
+                return TranslationManager.skipPluginTrans(() => {
+                    return _CEC.call(this, part);
+                })
+            };
+            const _convertImageCommand = part => {
+                return TranslationManager.fetchRawData(() => {
+                    return TranslationManager.disablePluginTrans(() => {
+                        return _CEC.call(this, part);
+                    })
+                })
+            };
+            ranges.forEach(range => {
+                if (range[0] > offset) {
+                    result.push(_convertDisplayText(translated.slice(offset, range[0])));
+                }
+                result.push(_convertImageCommand(translated.slice(range[0], range[1])));
+                offset = range[1];
+            });
+            if (offset < translated.length) {
+                result.push(_convertDisplayText(translated.slice(offset)));
+            }
+            return result.join('');
+        };
+        const _processNC = Torigoya.Bookshelf.Window_BookContent.prototype.processNormalCharacter;
+        Torigoya.Bookshelf.Window_BookContent.prototype.processNormalCharacter = function () {
+            return TranslationManager.skipPluginTrans(() => {
+                return _processNC.apply(this, arguments);
+            })
+        };
+        Torigoya._jtTorigoya_BookshelfPatched = true;
+    }
+
+    //Torigoya_SkillCutIn.js
+    //1.4.0
+    //MV
+    function patch_Torigoya_SkillCutIn() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Torigoya === 'undefined' ||
+            !Torigoya.SkillCutIn ||
+            !Torigoya.SkillCutIn.CutInManager ||
+            typeof Torigoya.SkillCutIn.CutInManager.canPlayConfig !== 'function' ||
+            Torigoya._jtTorigoya_SkillCutInPatched
+        ) return;
+        const _canPC = Torigoya.SkillCutIn.CutInManager.canPlayConfig;
+        Torigoya.SkillCutIn.CutInManager.canPlayConfig = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _canPC.apply(this, arguments);
+            })
+        };
+        Torigoya._jtTorigoya_SkillCutInPatched = true;
+    }
+
+    //Torigoya_SkillChangeTo.js
+    //1.1.0
+    //MV
+    function patch_Torigoya_SkillChangeTo() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof BattleManager.torigoyaSkillChangeToApply !== 'function' ||
+            BattleManager._jtTorigoya_SkillChangeToPatched
+        ) return;
+        const _torigoyaSCTA = BattleManager.torigoyaSkillChangeToApply;
+        BattleManager.torigoyaSkillChangeToApply = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _torigoyaSCTA.apply(this, arguments);
+                })
+            })
+        };
+        BattleManager._jtTorigoya_SkillChangeToPatched = true;
+    }
+
+    //Torigoya_Achievement2.js
+    //1.8.2
+    //MV
+    function patch_Torigoya_Achievement2() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Torigoya === 'undefined' ||
+            !Torigoya.Achievement2 ||
+            !Torigoya.Achievement2.Window_AchievementPopup ||
+            !Torigoya.Achievement2.Window_AchievementList ||
+            Torigoya._jtTorigoya_Achievement2Patched
+        ) return;
+        const _shouldSkip = () => {
+            return TranslationManager._translationDisableDepth > 0 || TranslationManager._translatedSkipDepth > 0;
+        };
+        const _drawTitle = Torigoya.Achievement2.Window_AchievementPopup.prototype.drawTitle;
+        Torigoya.Achievement2.Window_AchievementPopup.prototype.drawTitle = function () {
+            if (_shouldSkip()) {
+                return _drawTitle.apply(this, arguments);
+            }
+            this.resetFontSettings();
+            const title = TranslationManager.translate(this._item.achievement.title);
+            const prefix = '\\c[' + Torigoya.Achievement2.parameter.popupTitleColor + ']';
+            return TranslationManager.skipPluginTrans(() => {
+                return this.drawTextEx(prefix + title, 40, 0);
+            });
+        };
+        const _patchedWindows = new WeakSet();
+        const _updateHelp = Torigoya.Achievement2.Window_AchievementList.prototype.updateHelp;
+        Torigoya.Achievement2.Window_AchievementList.prototype.updateHelp = function () {
+            const helpWindow = this._helpWindow;
+            if (helpWindow && !_patchedWindows.has(helpWindow)) {
+                const _drawTextEx = helpWindow.drawTextEx;
+                helpWindow.drawTextEx = function (text) {
+                    if (_shouldSkip()) {
+                        return _drawTextEx.apply(this, arguments);
+                    }
+                    const _drawArguments = Array.prototype.slice.call(arguments);
+                    _drawArguments[0] = TranslationManager.translate(text);
+                    return TranslationManager.skipPluginTrans(() => {
+                        return _drawTextEx.apply(this, _drawArguments);
+                    })
+                };
+                _patchedWindows.add(helpWindow);
+            }
+            return _updateHelp.apply(this, arguments);
+        };
+        Torigoya._jtTorigoya_Achievement2Patched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -9319,6 +9514,10 @@
         patch_DarkPlasma_ChoiceExtension();
         patch_DarkPlasma_FormationInBattle();
         patch_TorigoyaMZ_Bookshelf();
+        patch_Torigoya_Bookshelf();
+        patch_Torigoya_SkillCutIn();
+        patch_Torigoya_SkillChangeTo();
+        patch_Torigoya_Achievement2();
     };
     //#endregion
 
