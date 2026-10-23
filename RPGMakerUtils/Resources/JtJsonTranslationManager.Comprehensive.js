@@ -9716,6 +9716,24 @@
         _Window_BattleLog_addText.call(this, TranslationManager.translate(text));
     };
 
+    //Bitmap related single char retrans problem should be fixed by these two patches
+    if (typeof Window_Base.prototype.flushTextState === 'function') {
+        const _flushTS = Window_Base.prototype.flushTextState;
+        Window_Base.prototype.flushTextState = function () {
+            return TranslationManager.skipPluginTrans(() => {
+                return _flushTS.apply(this, arguments);
+            })
+        };
+    }
+    if (typeof Window_Base.prototype.processNormalCharacter === 'function') {
+        const _processNC = Window_Base.prototype.processNormalCharacter;
+        Window_Base.prototype.processNormalCharacter = function () {
+            return TranslationManager.skipPluginTrans(() => {
+                return _processNC.apply(this, arguments);
+            })
+        };
+    }
+    
     // Thanks to the improvement in translate function, this is be acceptable now.
     // Window_Base.drawText is implemented in terms of Bitmap.drawText, so patching Bitmap.drawText should cover most cases.
     const _Bitmap_drawText = Bitmap.prototype.drawText;
@@ -9724,9 +9742,11 @@
             return _Bitmap_drawText.call(this, text, x, y, maxWidth, lineHeight, align);
         }
         if (typeof (text) === 'string') {
+            /*
             if (TranslationManager._inRecent(text)) {
                 return _Bitmap_drawText.call(this, text, x, y, maxWidth, lineHeight, align);
             }
+            */
             return _Bitmap_drawText.call(this, TranslationManager.translate(text), x, y, maxWidth, lineHeight, align);
         }
         else {
@@ -9740,9 +9760,11 @@
             return _Bitmap_measureTextWidth.call(this, text);
         }
         if (typeof (text) === 'string') {
+            /*
             if (TranslationManager._inRecent(text)) {
                 return _Bitmap_measureTextWidth.call(this, text);
             }
+            */
             return _Bitmap_measureTextWidth.call(this, TranslationManager.translate(text));
         } else {
             return _Bitmap_measureTextWidth.call(this, text);
