@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.9.10.5 Torigoya plugins primary support
+ * @patch ver 0.10.05.8 NUUN plugins essential support, paywalled instances omitted
+ *        ver 0.9.10.5 Torigoya plugins primary support
  *        ver 0.8.10.14 DarkPlasma plugins primary support
  *        ver 0.7.05.32 FTKR MV plugins support
  *        ver 0.6.05.16 YEP MV plugins support
@@ -13,6 +14,8 @@
  *        ver 0.1.10.0 triacontane plugins primary support
  * @memo    1. Game_Message.newPage rarely used, discard.
  *          2. WishListForFusionItem n NotifyWishList from DarkPlasma may need rework after Torigoya patch.
+ *          3. Window_Command.prototype.addCommand on hold.
+ *          4. Window_BattleLog.prototype.addText reassess.
  *
  * @help
  * This plugin loads a 'translations.json' file from the 'www' folder and uses it to translate various text strings in the game.
@@ -9194,6 +9197,345 @@
         Torigoya._jtTorigoya_Achievement2Patched = true;
     }
 
+    //NUUN_CallingEnemy.js
+    //1.1.0
+    //MZ
+    function patch_NUUN_CallingEnemy() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Imported === 'undefined' ||
+            !Imported.NUUN_CallingEnemy ||
+            typeof Game_Action.prototype.isCallEnemy !== 'function' ||
+            typeof Game_Action.prototype.getCallEnemyLottery !== 'function' ||
+            typeof Game_Troop.prototype.isCallEnemy !== 'function' ||
+            typeof Game_Action.prototype.setAppearEnemyMessage !== 'function' ||
+            Game_Action._jtNUUN_CallingEnemyPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        Game_Action.prototype.isCallEnemy = wrapRaw(Game_Action.prototype.isCallEnemy);
+        Game_Action.prototype.getCallEnemyLottery = wrapRaw(Game_Action.prototype.getCallEnemyLottery);
+        Game_Troop.prototype.isCallEnemy = wrapRaw(Game_Troop.prototype.isCallEnemy);
+        Game_Troop.prototype.makeUniqueNames = wrapRaw(Game_Troop.prototype.makeUniqueNames);//risky ig
+        Game_Action.prototype.setAppearEnemyMessage = wrapRaw(Game_Action.prototype.setAppearEnemyMessage);
+        Game_Action._jtNUUN_CallingEnemyPatched = true;
+    }
+
+    //NUUN_ItemBook.js
+    //1.6.6
+    //MZ
+    function patch_NUUN_ItemBook() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Window_ItemBook_Index === 'undefined' ||
+            Window_ItemBook_Index._jtNUUN_ItemBookPatched
+        ) return;
+        const _patchedPrototypes = new WeakSet();
+        const _itemNL = Window_ItemBook_Index.prototype.itemNameLength;
+        Window_ItemBook_Index.prototype.itemNameLength = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _itemNL.apply(this, arguments);
+            });
+        };
+        function _patchDetailWindow(itemWindow) {
+            if (!itemWindow) return;
+            const _detailProto = Object.getPrototypeOf(itemWindow);
+            if (!_detailProto || _patchedPrototypes.has(_detailProto) || typeof _detailProto.dataDisplay !== 'function') return;
+            const _dataDisplay = _detailProto.dataDisplay;
+            _detailProto.dataDisplay = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return _dataDisplay.apply(this, arguments);
+                });
+            };
+            const _drawTE = _detailProto.drawTextEx;
+            _detailProto.drawTextEx = function () {
+                return TranslationManager.fetchTranslatedData(() => {
+                    return _drawTE.apply(this, arguments);
+                });
+            };
+            _patchedPrototypes.add(_detailProto);
+        };
+        const _setIW = Window_ItemBook_Index.prototype.setItemWindow;
+        Window_ItemBook_Index.prototype.setItemWindow = function (itemWindow) {
+            _patchDetailWindow(itemWindow);
+            return _setIW.apply(this, arguments);
+        };
+        Window_ItemBook_Index._jtNUUN_ItemBookPatched = true;
+    }
+
+    //NUUN_EnemyBook.js
+    //2.23.4
+    //MZ
+    function patch_NUUN_EnemyBook() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Imported === 'undefined' ||
+            !Imported.NUUN_EnemyBook ||
+            typeof Window_EnemyBook_Index === 'undefined' ||
+            Window_EnemyBook_Index._jtNUUN_EnemyBookPatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        [
+            'initialize',
+            'isEnemyBook',
+            'isEnemyBookData',
+            'isInEnemyBook',
+            'isInEnemyBookStatus',
+            'noEnemyBookEnemyName',
+            'setDefeatEnemy'
+        ].forEach(name => {
+            if (typeof Game_System.prototype[name] === 'function') {
+                Game_System.prototype[name] = wrapRaw(Game_System.prototype[name]);
+            }
+        });
+        DataManager.extractSaveContents = wrapRaw(DataManager.extractSaveContents);
+        Window_EnemyBook_Index.prototype.EnemyNameLength = wrapRaw(Window_EnemyBook_Index.prototype.EnemyNameLength);
+        if (typeof Window_EnemyBook_Index.prototype.itemListNameOrder === 'function') {
+            Window_EnemyBook_Index.prototype.itemListNameOrder = wrapRaw(Window_EnemyBook_Index.prototype.itemListNameOrder);
+        }
+        const _contentWindows = new WeakSet();
+        const _prepareContentWindow = function (bookWindow) {
+            if (!bookWindow || _contentWindows.has(bookWindow)) return;
+            [
+                'dropItems',
+                'stealItems',
+                'condDropItems',
+                'enemyAction'
+            ].forEach(name => {
+                if (typeof bookWindow[name] === 'function') {
+                    bookWindow[name] = wrapRaw(bookWindow[name]);
+                }
+            });
+            if (typeof bookWindow.enemyName === 'function') {
+                bookWindow.enemyName = wrapRaw(bookWindow.enemyName);
+            }
+            _contentWindows.add(bookWindow);
+        };
+        const _indexWindows = new WeakSet();
+        const _initialize = Window_EnemyBook_Index.prototype.initialize;
+        Window_EnemyBook_Index.prototype.initialize = function () {
+            const result = _initialize.apply(this, arguments);
+            if (!_indexWindows.has(this)) {
+                this.drawItem = wrapRaw(this.drawItem);
+                _indexWindows.add(this);
+            }
+            return result;
+        };
+        const _setEW = Window_EnemyBook_Index.prototype.setEnemyWindow;
+        Window_EnemyBook_Index.prototype.setEnemyWindow = function (bookWindow) {
+            _prepareContentWindow(bookWindow);
+            return _setEW.apply(this, arguments);
+        };
+        const _setEBW = BattleManager.setEnemyBookWinsow;//upstream typo
+        BattleManager.setEnemyBookWinsow = function (bookWindow) {
+            _prepareContentWindow(bookWindow);
+            return _setEBW.apply(this, arguments);
+        };
+        Game_Action.prototype.analyzeSkill = wrapRaw(Game_Action.prototype.analyzeSkill);
+        const _percentWindows = new WeakSet();
+        const _preparePercentWindow = function (percentWindow) {
+            if (!percentWindow || _percentWindows.has(percentWindow)) return;
+            const _getPP = percentWindow.getPercentParam;
+            percentWindow.getPercentParam = function (content) {
+                if (TranslationManager._translationDisableDepth > 0 || TranslationManager._translatedSkipDepth > 0) {
+                    return _getPP.apply(this, arguments);
+                }
+                const _displayContent = content ? Object.assign({}, content) : { ContentDate: 0, ContentName: '完成度' };
+                _displayContent.ContentName = TranslationManager.translate(_displayContent.ContentName);
+                const result = _getPP.call(this, _displayContent);
+                TranslationManager.pushConvertedText(result);
+                return result;
+            };
+            _percentWindows.add(percentWindow);
+        };
+        const _setPW = Window_EnemyBook_Index.prototype.setPercentWindow;
+        Window_EnemyBook_Index.prototype.setPercentWindow = function (percentWindow) {
+            _preparePercentWindow(percentWindow);
+            return _setPW.apply(this, arguments);
+        };
+        Window_EnemyBook_Index._jtNUUN_EnemyBookPatched = true;
+    }
+
+    //NUUN_MenuCommandEX.js
+    //1.2.3
+    //MZ
+    function patch_NUUN_MenuCommandEX() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Imported === 'undefined' ||
+            !Imported.NUUN_MenuCommandEX ||
+            Window_MenuCommand._jtNUUN_MenuCommandEXPatched
+        ) return;
+        const _makeCL = Window_MenuCommand.prototype.makeCommandList;
+        Window_MenuCommand.prototype.makeCommandList = function () {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _makeCL.apply(this, arguments);
+                })
+            })
+        };
+        Window_MenuCommand._jtNUUN_MenuCommandEXPatched = true;
+    }
+
+    //NUUN_MenuScreenEX.js
+    //3.1.15
+    //MZ
+    function patch_NUUN_MenuScreenEX() {
+        if (
+            Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof Imported === "undefined" ||
+            !Imported.NUUN_MenuScreenEX ||
+            typeof Scene_Menu.prototype.updateCommandName !== "function" ||
+            Scene_Menu._jtNUUN_MenuScreenEXPatched
+        ) return;
+        const rawLogic = callback => {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(callback);
+            });
+        };
+        const rawReads = callback => {
+            return TranslationManager.fetchRawData(callback);
+        };
+        function wrap(target, method, run) {
+            const ori = target[method];
+            if (typeof ori !== 'function') return;
+            target[method] = function () {
+                return run(() => ori.apply(this, arguments));
+            };
+        };
+        wrap(Window_MenuCommand.prototype, 'makeCommandList', rawLogic);
+        [
+            'nuunMenu_isContents',
+            'nuunMenu_drawMenuStatusImg'
+        ].forEach(method => { wrap(Window_StatusBase.prototype, method, rawLogic) });
+        [
+            'nuun_DrawMenuStatusContentsOrgParam',
+            'nuun_DrawMenuStatusContentsExp',
+            'nuun_DrawMenuStatusContentsSkillPoint',
+            'nuunMenu_drawParams',
+            'nuunMenu_drawXParams',
+            'nuunMenu_drawSParams'
+        ].forEach(method => { wrap(Window_StatusBase.prototype, method, rawReads) });
+        if (typeof Sprite_MenuGauge !== 'undefined') {
+            [
+                'currentValue',
+                'currentMaxValue'
+            ].forEach(method => { wrap(Sprite_MenuGauge.prototype, method, rawLogic) });
+        }
+        const _addW = Scene_Menu.prototype.addWindow;
+        Scene_Menu.prototype.addWindow = function (window) {
+            if (window && typeof window.nuun_DrawMenuInfoContentsOrgParam === 'function' && !window._jtNUUN_MenuScreenEXPatched) {
+                wrap(window, 'nuun_DrawMenuInfoContentsOrgParam', rawReads);
+                window._jtNUUN_MenuScreenEXPatched = true;
+            }
+            return _addW.apply(this, arguments);
+        };
+        Scene_Menu._jtNUUN_MenuScreenEXPatched = true;
+    }
+
+    //NUUN_StatusScreen.js
+    //2.7.3
+    //MZ
+    //display related patch on hold cuz drawText(Ex) scope not clear under Window_Status
+    function patch_NUUN_StatusScreen() {
+        if (
+            Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof Window_Status.prototype.nuunStatusActorImg !== 'function' ||
+            Window_Status._jtNUUN_StatusScreenPatched
+        ) return;
+        ['dateDisplay', 'drawImg'].forEach(method => {
+            const ori = Window_Status.prototype[method];
+            if (typeof ori !== 'function') return;
+            Window_Status.prototype[method] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                })
+            };
+        });
+        Window_Status._jtNUUN_StatusScreenPatched = true;
+    }
+
+    //NUUN_SystemDatabaseUnlimited.js
+    //1.1.0
+    //MZ
+    function patch_NUUN_SystemDatabaseUnlimited() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            PluginManager._jtNUUN_SystemDatabaseUnlimitedPatched
+        ) return;
+        [
+            'NUUN_SystemDatabaseUnlimited:DataBaseAddMaps',
+            'NUUN_SystemDatabaseUnlimited:AddMap'
+        ].forEach(method => {
+            const ori = PluginManager._commands[method];
+            if (typeof ori !== 'function') return;
+            PluginManager._commands[method] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                })
+            }
+        });
+        PluginManager._jtNUUN_SystemDatabaseUnlimitedPatched = true;
+    }
+
+    //NUUN_BattleStyleEX.js
+    //1.1.2
+    //MZ
+    function patch_NUUN_BattleStyleEX() {
+        if (
+            Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof Imported === "undefined" ||
+            !Imported.NUUN_BattleStyleEX ||
+            typeof Nuun_DrawListData === "undefined" ||
+            typeof Window_BattleActorStatus === "undefined" ||
+            Nuun_DrawListData._jtNUUN_BattleStyleEXPatched
+        ) return;
+        const rawLogic = callback => {
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(callback);
+            });
+        };
+        function switchWrap(target, method, gate) {
+            const ori = target[method];
+            if (typeof ori !== 'function') return;
+            target[method] = function () {
+                if (!gate(this)) {
+                    return ori.apply(this, arguments);
+                }
+                return rawLogic(() => {
+                    return ori.apply(this, arguments);
+                });
+            }
+        };
+        const _isBattleStatusData = data => { return data._window instanceof Window_BattleActorStatus };
+        [
+            "nuun_IsContents",
+            "getStatusEvalParam"
+        ].forEach(method => {
+            switchWrap(Nuun_DrawListData.prototype, method, _isBattleStatusData);
+        });
+        if (typeof Sprite_NuunGauge !== 'undefined') {
+            [
+                "orgGaugeValue",
+                "orgGaugeMaxValue"
+            ].forEach(method => {
+                switchWrap(Sprite_NuunGauge.prototype, method, () => SceneManager._scene instanceof Scene_Battle);
+            });
+        }
+        Nuun_DrawListData._jtNUUN_BattleStyleEXPatched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -9294,6 +9636,11 @@
     //0.2.1
     //MZ
     //wont break the game w/o patch ig
+
+    //NUUN_CommandIcon.js
+    //1.6.1
+    //MZ
+    //all vanilla entrace, hard to patch, discard.
 
     //#endregion
 
@@ -9518,6 +9865,14 @@
         patch_Torigoya_SkillCutIn();
         patch_Torigoya_SkillChangeTo();
         patch_Torigoya_Achievement2();
+        patch_NUUN_CallingEnemy();
+        patch_NUUN_ItemBook();
+        patch_NUUN_EnemyBook();
+        patch_NUUN_MenuCommandEX();
+        patch_NUUN_MenuScreenEX();
+        patch_NUUN_StatusScreen();
+        patch_NUUN_SystemDatabaseUnlimited();
+        patch_NUUN_BattleStyleEX();
     };
     //#endregion
 
@@ -9690,6 +10045,8 @@
 
     //#region Patches
     // Choices and other command window text
+    //removing this might introduce mismatch, but mtools' text extraction is to blame?
+    //post proc like AutoRubyReplace.js does exist, whilist trans here also break their logic
     const _Window_Command_addCommand = Window_Command.prototype.addCommand;
     Window_Command.prototype.addCommand = function (name, symbol, enabled = true, ext = null) {
         if (TranslationManager._translationDisableDepth > 0) {
@@ -9733,7 +10090,7 @@
             })
         };
     }
-    
+
     // Thanks to the improvement in translate function, this is be acceptable now.
     // Window_Base.drawText is implemented in terms of Bitmap.drawText, so patching Bitmap.drawText should cover most cases.
     const _Bitmap_drawText = Bitmap.prototype.drawText;
