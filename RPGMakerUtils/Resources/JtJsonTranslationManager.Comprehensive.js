@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.10.05.8 NUUN plugins essential support, paywalled instances omitted
+ * @patch ver 0.11.05.3 Lulu's Church MV plugins support
+ *        ver 0.10.05.8 NUUN plugins essential support, paywalled instances omitted
  *        ver 0.9.10.5 Torigoya plugins primary support
  *        ver 0.8.10.14 DarkPlasma plugins primary support
  *        ver 0.7.05.32 FTKR MV plugins support
@@ -9536,6 +9537,123 @@
         Nuun_DrawListData._jtNUUN_BattleStyleEXPatched = true;
     }
 
+    //LL_MenuScreenCustomMV.js
+    //1.4.4
+    //MV
+    function patch_LL_MenuScreenCustomMV() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Scene_Menu.prototype.createMenuHelpWindow !== 'function' ||
+            typeof Window_Command.prototype.currentName !== 'function' ||
+            Scene_Menu._jtLL_MenuScreenCustomMVPatched
+        ) return;
+        const _params = PluginManager.parameters('LL_MenuScreenCustomMV');
+        const _entries = JSON.parse(_params.menuHelpTexts || '[]');
+        const _sourceByTranslatedName = new Map();
+        if (_entries) {
+            _entries.forEach(entry => {
+                const sourceName = String(JSON.parse(entry).symbol);
+                const translatedName = TranslationManager.translate(sourceName);
+                _sourceByTranslatedName.set(translatedName, sourceName);
+            });
+        }
+        const _helpCommandWindows = new WeakSet();
+        const _createMHW = Scene_Menu.prototype.createMenuHelpWindow;
+        Scene_Menu.prototype.createMenuHelpWindow = function () {
+            const result = TranslationManager.fetchRawData(() => {
+                return _createMHW.apply(this, arguments);
+            });
+            if (this._menuHelpWindow && !this._menuHelpWindow._jtLL_MenuScreenCustomMVPatched) {
+                const _refresh = this._menuHelpWindow.refresh;
+                this._menuHelpWindow.refresh = function () {
+                    return TranslationManager.fetchRawData(() => {
+                        return _refresh.apply(this, arguments);
+                    })
+                };
+                this._menuHelpWindow._jtLL_MenuScreenCustomMVPatched = true;
+            }
+            if (this._menuHelpWindow && this._commandWindow) {
+                _helpCommandWindows.add(this._commandWindow);
+            }
+            return result;
+        };
+        const _currentName = Window_Command.prototype.currentName;
+        Window_Command.prototype.currentName = function () {
+            const name = _currentName.apply(this, arguments);
+            if (_helpCommandWindows.has(this) && _sourceByTranslatedName.has(name)) {
+                return _sourceByTranslatedName.get(name);
+            }
+            return name;
+        };
+        Scene_Menu._jtLL_MenuScreenCustomMVPatched = true;
+    }
+
+    //LL_MenuScreenStatusMV.js
+    //1.0.2
+    //MV
+    function patch_LL_MenuScreenStatusMV() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Scene_Status.prototype.createStatusWithPictureWindow !== 'function' ||
+            Scene_Status._jtLL_MenuScreenStatusMVPatched
+        ) return;
+        const _createSWPW = Scene_Status.prototype.createStatusWithPictureWindow;
+        Scene_Status.prototype.createStatusWithPictureWindow = function () {
+            const result = _createSWPW.apply(this, arguments);
+            const _statusWindow = this._statusWithPictureWindow;
+            if (!_statusWindow && typeof _statusWindow.drawExpInfo === 'function' && !_statusWindow._jtLL_MenuScreenStatusMVPatched) {
+                const _drawEI = _statusWindow.drawExpInfo;
+                _statusWindow.drawExpInfo = function () {
+                    return TranslationManager.skipPluginTrans(() => {
+                        return _drawEI.apply(this, arguments);
+                    })
+                };
+                _statusWindow._jtLL_MenuScreenStatusMVPatched = true;
+            }
+            return result;
+        };
+        Scene_Status._jtLL_MenuScreenStatusMVPatched = true;
+    }
+
+    //LL_GalgeChoiceWindowMV.js
+    //2.0.2
+    //MV
+    function patch_LL_GalgeChoiceWindowMV() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_Message.prototype.setGalgeChoices !== 'function' ||
+            Game_Message._jtLL_GalgeChoiceWindowMVPatched
+        ) return;
+        const _startIpt = Window_Message.prototype.startInput;
+        Window_Message.prototype.startInput = function () {
+            const _choiceWindow = this._galgeChoiceWindow;
+            if (_choiceWindow && gameMessage.isGalgeChoice() && !_choiceWindow._jtLL_GalgeChoiceWindowMVPatched) {
+                const _CEC = _choiceWindow.convertEscapeCharacters;
+                _choiceWindow.convertEscapeCharacters = function (text) {
+                    if (
+                        TranslationManager._translationDisableDepth > 0 ||
+                        TranslationManager._translatedSkipDepth > 0
+                    ) {
+                        return _CEC.apply(this, arguments);
+                    };
+                    const translated = TranslationManager.translate(text);
+                    return TranslationManager.skipPluginTrans(() => {
+                        return _CEC.call(this, translated);
+                    });
+                };
+                const _drawText = _choiceWindow.drawText;
+                _choiceWindow.drawText = function () {
+                    return TranslationManager.skipPluginTrans(() => {
+                        return _drawText.apply(this, arguments);
+                    });
+                };
+                _choiceWindow._jtLL_GalgeChoiceWindowMVPatched = true;
+            };
+            return _startIpt.apply(this, arguments);
+        };
+        Game_Message._jtLL_GalgeChoiceWindowMVPatched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -9641,6 +9759,11 @@
     //1.6.1
     //MZ
     //all vanilla entrace, hard to patch, discard.
+
+    //LL_StandingPictureMV.js
+    //2.7.0
+    //MV
+    //don wanna bother w/ convertEscapeCharacters override under Window_Base
 
     //#endregion
 
@@ -9873,6 +9996,9 @@
         patch_NUUN_StatusScreen();
         patch_NUUN_SystemDatabaseUnlimited();
         patch_NUUN_BattleStyleEX();
+        patch_LL_MenuScreenCustomMV();
+        patch_LL_MenuScreenStatusMV();
+        patch_LL_GalgeChoiceWindowMV();
     };
     //#endregion
 
