@@ -2,7 +2,7 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.11.05.3 Lulu's Church MV plugins support
+ * @patch ver 0.11.10.6 Lulu's Church plugins primary support
  *        ver 0.10.05.8 NUUN plugins essential support, paywalled instances omitted
  *        ver 0.9.10.5 Torigoya plugins primary support
  *        ver 0.8.10.14 DarkPlasma plugins primary support
@@ -9540,14 +9540,17 @@
     //LL_MenuScreenCustomMV.js
     //1.4.4
     //MV
+    //LL_MenuScreenCustom.js
+    //1.4.4
+    //MZ
     function patch_LL_MenuScreenCustomMV() {
         if (
-            Utils.RPGMAKER_NAME !== 'MV' ||
             typeof Scene_Menu.prototype.createMenuHelpWindow !== 'function' ||
             typeof Window_Command.prototype.currentName !== 'function' ||
             Scene_Menu._jtLL_MenuScreenCustomMVPatched
         ) return;
-        const _params = PluginManager.parameters('LL_MenuScreenCustomMV');
+        const _pluginName = Utils.RPGMAKER_NAME === 'MZ' ? 'LL_MenuScreenCustom' : 'LL_MenuScreenCustomMV';
+        const _params = PluginManager.parameters(_pluginName);
         const _entries = JSON.parse(_params.menuHelpTexts || '[]');
         const _sourceByTranslatedName = new Map();
         if (_entries) {
@@ -9591,9 +9594,11 @@
     //LL_MenuScreenStatusMV.js
     //1.0.2
     //MV
+    //LL_MenuScreenStatus.js
+    //1.0.2
+    //MZ
     function patch_LL_MenuScreenStatusMV() {
         if (
-            Utils.RPGMAKER_NAME !== 'MV' ||
             typeof Scene_Status.prototype.createStatusWithPictureWindow !== 'function' ||
             Scene_Status._jtLL_MenuScreenStatusMVPatched
         ) return;
@@ -9601,7 +9606,7 @@
         Scene_Status.prototype.createStatusWithPictureWindow = function () {
             const result = _createSWPW.apply(this, arguments);
             const _statusWindow = this._statusWithPictureWindow;
-            if (!_statusWindow && typeof _statusWindow.drawExpInfo === 'function' && !_statusWindow._jtLL_MenuScreenStatusMVPatched) {
+            if (_statusWindow && typeof _statusWindow.drawExpInfo === 'function' && !_statusWindow._jtLL_MenuScreenStatusMVPatched) {
                 const _drawEI = _statusWindow.drawExpInfo;
                 _statusWindow.drawExpInfo = function () {
                     return TranslationManager.skipPluginTrans(() => {
@@ -9652,6 +9657,74 @@
             return _startIpt.apply(this, arguments);
         };
         Game_Message._jtLL_GalgeChoiceWindowMVPatched = true;
+    }
+
+    //LL_GalgeChoiceWindow.js
+    //2.0.1
+    //MZ
+    function patch_LL_GalgeChoiceWindow() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Scene_Message.prototype.createGalgeChoiceListWindow !== 'function' ||
+            PluginManager._jtLL_GalgeChoiceWindowPatched
+        ) return;
+        const _canTranslate = () => !TranslationManager.isRawData() && TranslationManager._translationDisableDepth === 0 && TranslationManager._translatedSkipDepth === 0;
+        const commands = PluginManager._commands;
+        const key = 'LL_GalgeChoiceWindow:showChoice';
+        if (typeof commands[key] !== 'function') return;
+        const _showChoice = commands[key];
+        commands[key] = function (args) {
+            const displayArgs = Object.assign({}, args);
+            if (_canTranslate()) {
+                displayArgs.messageText = TranslationManager.translate(String(args.messageText));
+            }
+            return TranslationManager.fetchRawData(() => {
+                return TranslationManager.disablePluginTrans(() => {
+                    return _showChoice.call(this, displayArgs);
+                })
+            })
+        };
+        const _installWindow = window => {
+            if (!window.constructor || window.constructor.name !== 'Window_GalgeChoiceList' || window._jtLL_GalgeChoiceWindowPatched) return;
+            //constructor name huh
+            const _addC = window.addCommand;
+            window.addCommand = function () {
+                return TranslationManager.disablePluginTrans(() => _addC.apply(this, arguments));
+            };
+            const _CEC = window.convertEscapeCharacters;
+            window.convertEscapeCharacters = function (text) {
+                if (!_canTranslate()) {
+                    return _CEC.apply(this, arguments);
+                }
+                const translated = TranslationManager.translate(text);
+                return TranslationManager.skipPluginTrans(() => {
+                    return _CEC.call(this, translated);
+                });
+            };
+            const _drawText = window.drawText;
+            window.drawText = function () {
+                return TranslationManager.skipPluginTrans(() => _drawText.apply(this, arguments));
+            };
+            const _setQT = window.setQuestionText;
+            window.setQuestionText = function () {
+                return TranslationManager.skipPluginTrans(() => _setQT.apply(this, arguments));
+            };
+            window._jtLL_GalgeChoiceWindowPatched = true;
+        };
+        const _createGCLW = Scene_Message.prototype.createGalgeChoiceListWindow;
+        Scene_Message.prototype.createGalgeChoiceListWindow = function () {
+            const _initialize = Window_Command.prototype.initialize;
+            Window_Command.prototype.initialize = function () {
+                _installWindow(this);
+                return _initialize.apply(this, arguments);
+            };
+            try {
+                return _createGCLW.apply(this, arguments);
+            } finally {
+                Window_Command.prototype.initialize = _initialize;
+            }
+        };
+        PluginManager._jtLL_GalgeChoiceWindowPatched = true;
     }
 
     //#endregion
@@ -9999,6 +10072,7 @@
         patch_LL_MenuScreenCustomMV();
         patch_LL_MenuScreenStatusMV();
         patch_LL_GalgeChoiceWindowMV();
+        patch_LL_GalgeChoiceWindow();
     };
     //#endregion
 
