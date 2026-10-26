@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.11.10.6 Lulu's Church plugins primary support
+ * @patch ver 0.12.05.10 VisuStella MZ plugins limited support
+ *        ver 0.11.10.6 Lulu's Church plugins primary support
  *        ver 0.10.05.8 NUUN plugins essential support, paywalled instances omitted
  *        ver 0.9.10.5 Torigoya plugins primary support
  *        ver 0.8.10.14 DarkPlasma plugins primary support
@@ -15,7 +16,7 @@
  *        ver 0.1.10.0 triacontane plugins primary support
  * @memo    1. Game_Message.newPage rarely used, discard.
  *          2. WishListForFusionItem n NotifyWishList from DarkPlasma may need rework after Torigoya patch.
- *          3. Window_Command.prototype.addCommand on hold.
+ *          3. Window_Command.prototype.addCommand trans disabled, old patches review needed.
  *          4. Window_BattleLog.prototype.addText reassess.
  *
  * @help
@@ -9727,6 +9728,416 @@
         PluginManager._jtLL_GalgeChoiceWindowPatched = true;
     }
 
+    //VisuMZ_1_BattleCore.js
+    //1.90
+    //MZ
+    function patch_VisuMZ_1_BattleCore() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof VisuMZ === 'undefined' ||
+            !VisuMZ.BattleCore ||
+            VisuMZ._jtVisuMZ_1_BattleCorePatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        if (typeof DataManager.getSkillIdWithName === 'function') {
+            DataManager.getSkillIdWithName = wrapRaw(DataManager.getSkillIdWithName);
+        }
+        if (typeof DataManager.getEnemyIdWithName === 'function') {
+            DataManager.getEnemyIdWithName = wrapRaw(DataManager.getEnemyIdWithName);
+        }
+        if (typeof Window_InBattleStatusStates !== 'undefined' && typeof Window_InBattleStatusStates.prototype.includeState === 'function') {
+            Window_InBattleStatusStates.prototype.includeState = wrapRaw(Window_InBattleStatusStates.prototype.includeState);
+        }
+        VisuMZ._jtVisuMZ_1_BattleCorePatched = true;
+    }
+
+    //VisuMZ_1_ItemsEquipsCore.js
+    //1.61
+    //MZ
+    function patch_VisuMZ_1_ItemsEquipsCore() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof VisuMZ === 'undefined' ||
+            !VisuMZ.ItemsEquipsCore ||
+            VisuMZ._jtVisuMZ_1_ItemsEquipsCorePatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        [
+            'getSkillIdWithName',
+            'getItemIdWithName',
+            'getWeaponIdWithName',
+            'getArmorIdWithName'
+        ].forEach(function (method) {
+            if (typeof DataManager[method] === 'function') {
+                DataManager[method] = wrapRaw(DataManager[method]);
+            }
+        });
+        if (typeof VisuMZ.ItemsEquipsCore.IncludeShopItem === 'function') {
+            VisuMZ.ItemsEquipsCore.IncludeShopItem = wrapRaw(VisuMZ.ItemsEquipsCore.IncludeShopItem);
+        }
+        if (typeof Window_ItemList.prototype.sortListItemScene === 'function') {
+            Window_ItemList.prototype.sortListItemScene = wrapRaw(Window_ItemList.prototype.sortListItemScene);
+        }
+        VisuMZ._jtVisuMZ_1_ItemsEquipsCorePatched = true;
+    }
+
+    //VisuMZ_1_SkillsStatesCore.js
+    //1.58
+    //MZ
+    function patch_VisuMZ_1_SkillsStatesCore() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof VisuMZ === 'undefined' ||
+            !VisuMZ.SkillsStatesCore ||
+            VisuMZ._jtVisuMZ_1_SkillsStatesCorePatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        ['getSkillIdWithName', 'getStateIdWithName'].forEach(function (method) {
+            if (typeof DataManager[method] === 'function') {
+                DataManager[method] = wrapRaw(DataManager[method]);
+            }
+        });
+        if (typeof Window_SkillList.prototype.sortSkillList === 'function') {
+            Window_SkillList.prototype.sortSkillList = wrapRaw(Window_SkillList.prototype.sortSkillList);
+        };
+        VisuMZ.SkillsStatesCore.Settings.Costs.forEach(function (settings) {
+            if (typeof settings.CalcJS === 'function') {
+                settings.CalcJS = wrapRaw(settings.CalcJS);
+            }
+        });
+        VisuMZ._jtVisuMZ_1_SkillsStatesCorePatched = true;
+    }
+
+    //VisuMZ_1_OptionsCore.js
+    //1.28
+    //MZ
+    function patch_VisuMZ_1_OptionsCore() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof VisuMZ === 'undefined' ||
+            !VisuMZ.OptionsCore ||
+            typeof Window_OptionsCategory === 'undefined' ||
+            VisuMZ._jtVisuMZ_1_OptionsCorePatched
+        ) return;
+        const _rawNames = new WeakMap();
+        const _addC = Window_OptionsCategory.prototype.addCommand;
+        Window_OptionsCategory.prototype.addCommand = function () {
+            const length = this._list.length;
+            const result = TranslationManager.disablePluginTrans(() => _addC.apply(this, arguments));
+            if (this._list.length > length) {
+                const command = this._list[this._list.length - 1];
+                const rawName = command.name;
+                if (TranslationManager._translationDisableDepth === 0) {
+                    command.name = TranslationManager.translate(rawName);
+                }
+                _rawNames.set(command, { rawName: rawName, displayName: command.name });
+            }
+            return result;
+        };
+        const _setC = Window_Options.prototype.setCategory;
+        Window_Options.prototype.setCategory = function (command) {
+            const names = command && _rawNames.get(command);
+            if (!names || command.name !== names.displayName) {
+                return _setC.apply(this, arguments);
+            }
+            const _rawCmd = Object.create(command);
+            _rawCmd.name = names.rawName;
+            return _setC.call(this, _rawCmd);
+        };
+        VisuMZ._jtVisuMZ_1_OptionsCorePatched = true;
+    }
+
+    //VisuMZ_1_MessageCore.js
+    //1.57
+    //MZ
+    //breaks CEC in Window_Base
+    function patch_VisuMZ_1_MessageCore() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof VisuMZ === 'undefined' ||
+            !VisuMZ.MessageCore ||
+            VisuMZ._jtVisuMZ_1_MessageCorePatched
+        ) return;
+        var frame = null;
+        var colorCache = new WeakMap();
+        var wordWrapDepth = 0;
+        function _canTranslate() {
+            return TranslationManager.isInitialized() && !TranslationManager.isRawData() && TranslationManager._translationDisableDepth === 0 && TranslationManager._translatedSkipDepth === 0;
+        };
+        function _outputEnabled(window) {
+            return frame && frame.window === window ? frame.translate : _canTranslate();
+        };
+        function _protectedRanges(text, includeCodes) {
+            var ranges = [];
+            function collect(regexp) {
+                var match;
+                while ((match = regexp.exec(text))) {
+                    ranges.push([match.index, match.index + match[0].length]);
+                    if (!match[0].length) regexp.lastIndex++;
+                }
+            };
+            collect(/(?:\\|\x1b)(?:KEY|TL|TRANSLATE|LOC|LOCALIZE|LOCALE)(?:\[[^\]]*\]|<[^>]*>|\{[^}]*\})|<[^>]*>|\$(?:\[[^\]]*\]|<[^>]*>|\{[^}]*\})/gi);
+            if (includeCodes) { collect(/(?:\\|\x1b)[A-Z]+(?:\[[^\]]*\])?/gi); };
+            var macros = VisuMZ.MessageCore.Settings.TextMacros;
+            for (var i = 0; i < macros.length; i++) {
+                collect(new RegExp('\\[' + macros[i].Match + '\\]', 'gi'));
+            }
+            return ranges;
+        };
+        const _translate = TranslationManager.translate;
+        TranslationManager.translate = function (text, spaces, times, cache, mask) {
+            if (typeof text === 'string') {
+                const ownMask = _protectedRanges(text);
+                if (ownMask.length) {
+                    const args = Array.prototype.slice.call(arguments);
+                    args[4] = (Array.isArray(mask) ? mask : []).concat(ownMask);
+                    return _translate.apply(this, args);
+                }
+            }
+            return _translate.apply(this, arguments);
+        };
+        function _wrapConversion(target, name) {
+            const ori = target[name];
+            if (typeof ori !== 'function') return;
+            target[name] = function () {
+                const previous = frame;
+                frame = { window: this, translate: _canTranslate() };
+                try {
+                    return TranslationManager.fetchRawData(() => TranslationManager.disablePluginTrans(() => ori.apply(this, arguments)));
+                } finally {
+                    frame = previous;
+                }
+            };
+        };
+        _wrapConversion(Window_Base.prototype, 'convertEscapeCharacters');
+        _wrapConversion(Window_Message.prototype, 'convertNewPageTextStateMacros');
+        const _convertTM = Window_Base.prototype.convertTextMacros;
+        Window_Base.prototype.convertTextMacros = function () {
+            return TranslationManager.fetchRawData(() => TranslationManager.disablePluginTrans(() => _convertTM.apply(this, arguments)));
+        };
+        [Window_Base.prototype, Window_Message.prototype].forEach(function (target) {
+            const _prepareWWEC = target.prepareWordWrapEscapeCharacters;
+            target.prepareWordWrapEscapeCharacters = function (text) {
+                const enabled = wordWrapDepth === 0 && _outputEnabled(this);
+                if (enabled) arguments[0] = TranslationManager.translate(text);
+                wordWrapDepth++;
+                var result;
+                try {
+                    result = _prepareWWEC.apply(this, arguments);
+                } finally {
+                    wordWrapDepth--;
+                }
+                if (enabled) TranslationManager.pushConvertedText(result);
+                return result;
+            };
+        });
+        function _translatedColors(list) {
+            const cached = colorCache.get(list);
+            if (cached && cached.dictionary === TranslationManager._dict) {
+                return cached.entries;
+            }
+            const entries = [];
+            for (var i = 0; i < list.length; i++) {
+                const match = /^\x1bC\[(\d+)\]([\s\S]*)\x1bPREVCOLOR\[0\]$/.exec(list[i][1]);
+                if (!match) continue;
+                const word = TranslationManager.translate(match[2]);
+                if (!word || word === match[2]) continue;
+                let source = VisuMZ.MessageCore.ConvertTextAutoColorRegExpFriendly(word);
+                if (list[i][0].source.slice(0, 2) === '\\b' && !/[\u3000-\u303f\u3040-\u30ff\uff00-\uffef\u4e00-\u9faf\u2605-\u2606\u2190-\u2195\u203b]/.test(word)) {
+                    source = '\\b' + source + '\\b';
+                }
+                entries.push([
+                    new RegExp(source, (list[i][0].global ? 'g' : '') + (list[i][0].ignoreCase ? 'i' : '')),
+                    '\x1bC[' + match[1] + ']' + word + '\x1bPREVCOLOR[0]'
+                ]);
+            }
+            colorCache.set(list, {
+                dictionary: TranslationManager._dict,
+                entries: entries
+            });
+            return entries;
+        };
+        function _applyTranslatedColors(text, list) {
+            const entries = _translatedColors(list);
+            for (var i = 0; i < entries.length; i++) {
+                const ranges = _protectedRanges(text, true);
+                const replacement = entries[i][1];
+                text = text.replace(entries[i][0], function (match, offset) {
+                    for (var j = 0; j < ranges.length; j++) {
+                        if (offset < ranges[j][1] && offset + match.length > ranges[j][0]) {
+                            return match;
+                        }
+                    }
+                    return replacement;
+                });
+            }
+            return text;
+        };
+        const _processSACC = Window_Base.prototype.processStoredAutoColorChanges;
+        Window_Base.prototype.processStoredAutoColorChanges = function (text) {
+            const result = _processSACC.apply(this, arguments);
+            return _outputEnabled(this) ? _applyTranslatedColors(result, VisuMZ.MessageCore.AutoColorRegExp) : result;
+        };
+        const _processANACC = Window_Base.prototype.processActorNameAutoColorChanges;
+        Window_Base.prototype.processActorNameAutoColorChanges = function (text) {
+            const result = _processANACC.apply(this, arguments);
+            return _outputEnabled(this) ? _applyTranslatedColors(result, this._autoColorActorNames) : result;
+        };
+        ['Bitmap_drawText', 'Bitmap_measureTextWidth'].forEach(function (name) {
+            const ori = VisuMZ.MessageCore[name];
+            if (typeof ori !== 'function') return;
+            VisuMZ.MessageCore[name] = function (text) {
+                if (_canTranslate()) arguments[0] = TranslationManager.translate(text);
+                return ori.apply(this, arguments);
+            };
+        });
+        const _command = TextManager.command;
+        TextManager.command = function () {
+            if (TextManager.isVisuMzLocalizationEnabled()) {
+                return TranslationManager.fetchRawData(() => _command.apply(this, arguments));
+            }
+            return _command.apply(this, arguments);
+        };
+        VisuMZ._jtVisuMZ_1_MessageCorePatched = true;
+    }
+
+    //VisuMZ_3_SkillCooldowns.js
+    //1.03
+    //MZ
+    function patch_VisuMZ_3_SkillCooldowns() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof VisuMZ === 'undefined' ||
+            !VisuMZ.SkillCooldowns ||
+            VisuMZ._jtVisuMZ_3_SkillCooldownsPatched
+        ) return;
+        [
+            'isBypassCooldowns',
+            'isBypassWarmups',
+            'applyCDWUnotetagsFlat',
+            'applyCDWUnotetagsRate'
+        ].forEach(function (method) {
+            const ori = Game_BattlerBase.prototype[method];
+            if (typeof ori !== 'function') return;
+            Game_BattlerBase.prototype[method] = function () {
+                return TranslationManager.fetchRawData(() => {
+                    return ori.apply(this, arguments);
+                });
+            };
+        });
+        VisuMZ._jtVisuMZ_3_SkillCooldownsPatched = true;
+    }
+
+    //VisuMZ_3_EnemyLevels.js
+    //1.05
+    //MZ
+    function patch_VisuMZ_3_EnemyLevels() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof VisuMZ === 'undefined' ||
+            !VisuMZ.EnemyLevel ||
+            typeof Game_Enemy.prototype.meetsSkillConditionsEnemyLevel !== 'function' ||
+            VisuMZ._jtVisuMZ_3_EnemyLevelsPatched
+        ) return;
+        const _meetsSCEL = Game_Enemy.prototype.meetsSkillConditionsEnemyLevel;
+        Game_Enemy.prototype.meetsSkillConditionsEnemyLevel = function () {
+            return TranslationManager.fetchRawData(() => {
+                return _meetsSCEL.apply(this, arguments);
+            })
+        };
+        VisuMZ._jtVisuMZ_3_EnemyLevelsPatched = true;
+    }
+
+    //VisuMZ_4_DiceRollsRngSeeds.js
+    //1.00
+    //MZ
+    function patch_VisuMZ_4_DiceRollsRngSeeds() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof VisuMZ === 'undefined' ||
+            !VisuMZ.DiceRollsRngSeeds ||
+            typeof Game_Action.prototype.applyRngAspects !== 'function' ||
+            Game_Action._jtVisuMZ_4_DiceRollsRngSeedsPatched
+        ) return;
+        const _applyRA = Game_Action.prototype.applyRngAspects;
+        Game_Action.prototype.applyRngAspects = function () {
+            return TranslationManager.fetchRawData(() => _applyRA.apply(this, arguments));
+        };
+        Game_Action._jtVisuMZ_4_DiceRollsRngSeedsPatched = true;
+    }
+
+    //VisuMZ_4_CombatLog.js
+    //1.08
+    //MZ
+    function patch_VisuMZ_4_CombatLog() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof VisuMZ === 'undefined' ||
+            !VisuMZ.CombatLog ||
+            typeof Window_CombatLogDisplay === 'undefined' ||
+            VisuMZ._jtVisuMZ_4_CombatLogPatched
+        ) return;
+        const separator = '=====HORZLINE=====';
+        const _addC = Window_CombatLogDisplay.prototype.addCommand;
+        Window_CombatLogDisplay.prototype.addCommand = function (name) {
+            if (name !== separator) return _addC.apply(this, arguments);
+            return TranslationManager.disablePluginTrans(() => _addC.apply(this, arguments));
+        };
+        VisuMZ._jtVisuMZ_4_CombatLogPatched = true;
+    }
+
+    //VisuMZ_2_ItemCraftingSys.js
+    //1.20
+    //MZ
+    function patch_VisuMZ_2_ItemCraftingSys() {
+        if (
+            Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof VisuMZ === "undefined" ||
+            !VisuMZ.ItemCraftingSys ||
+            typeof VisuMZ.ItemCraftingSys.maskItemName !== "function" ||
+            typeof Window_ItemCraftingIngredient === "undefined" ||
+            VisuMZ._jtVisuMZ_2_ItemCraftingSysPatched
+        ) return;
+        const _maskIN = VisuMZ.ItemCraftingSys.maskItemName;
+        VisuMZ.ItemCraftingSys.maskItemName = function () {
+            return TranslationManager.fetchRawData(() => _maskIN.apply(this, arguments));
+        };
+        if (typeof Window_ItemCraftingIngredient.prototype.drawText === 'function') {
+            const _drawText = Window_ItemCraftingIngredient.prototype.drawText;
+            Window_ItemCraftingIngredient.prototype.drawText = function (text, x, y, maxWidth, align) {
+                if (
+                    !this._alreadySelected ||
+                    TranslationManager.isRawData() ||
+                    TranslationManager._translationDisableDepth > 0 ||
+                    TranslationManager._translatedSkipDepth > 0
+                ) return _drawText.apply(this, arguments);
+                const settings = VisuMZ.ItemCraftingSys.Settings.General;
+                this.contents.textColor = ColorManager.getColor(settings.SelectedColor);
+                text = TranslationManager.translate(text) + TranslationManager.translate(settings.SelectedText);
+                return TranslationManager.skipPluginTrans(() => Window_Base.prototype.drawText.call(this, text, x, y, maxWidth, align));
+            };
+        }
+        VisuMZ._jtVisuMZ_2_ItemCraftingSysPatched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -9837,6 +10248,11 @@
     //2.7.0
     //MV
     //don wanna bother w/ convertEscapeCharacters override under Window_Base
+
+    //VisuMZ_2_PictureChoices.js
+    //1.00
+    //MZ
+    //assume it should always be used w/ VisuMZ_1_MessageCore ig
 
     //#endregion
 
@@ -10073,6 +10489,15 @@
         patch_LL_MenuScreenStatusMV();
         patch_LL_GalgeChoiceWindowMV();
         patch_LL_GalgeChoiceWindow();
+        patch_VisuMZ_1_BattleCore();
+        patch_VisuMZ_1_ItemsEquipsCore();
+        patch_VisuMZ_1_SkillsStatesCore();
+        patch_VisuMZ_1_OptionsCore();
+        patch_VisuMZ_3_SkillCooldowns();
+        patch_VisuMZ_3_EnemyLevels();
+        patch_VisuMZ_4_DiceRollsRngSeeds();
+        patch_VisuMZ_4_CombatLog();
+        patch_VisuMZ_2_ItemCraftingSys();
     };
     //#endregion
 
@@ -10233,6 +10658,7 @@
             patch_DescriptionTemplate();
             _registerSGCategoryTrans();
             patch_YEP_MessageCore();
+            patch_VisuMZ_1_MessageCore();
             TranslationManager.translateCommonData();
             patchPlugin();
             DataManager._translationApplied = true;
@@ -10247,6 +10673,9 @@
     // Choices and other command window text
     //removing this might introduce mismatch, but mtools' text extraction is to blame?
     //post proc like AutoRubyReplace.js does exist, whilist trans here also break their logic
+    //hard to restore raw string from translated commands, n commands r processed during its call chain, maintaining dynamic structure is way 2 complicated
+    //maybe translate on per plugin basis
+    /*
     const _Window_Command_addCommand = Window_Command.prototype.addCommand;
     Window_Command.prototype.addCommand = function (name, symbol, enabled = true, ext = null) {
         if (TranslationManager._translationDisableDepth > 0) {
@@ -10254,6 +10683,7 @@
         }
         return _Window_Command_addCommand.call(this, TranslationManager.translate(name), symbol, enabled, ext);
     };
+    */
 
     // Message window text
     // Going through CEC anyway so obsolete ig?

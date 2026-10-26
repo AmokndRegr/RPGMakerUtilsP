@@ -190,6 +190,20 @@ namespace RPGMakerUtils.ViewModels
                 SplitDictKeyValueByRegex(dict, key, RegexUtils.LineBreakRegex, 3);
         }
 
+        private static string GetPluginFileName(string pluginName)
+        {
+            if (string.IsNullOrWhiteSpace(pluginName))
+                return string.Empty;
+            string normalizedName = pluginName.Replace('\\', '/');
+            return Path.GetFileNameWithoutExtension(normalizedName);
+        }
+
+        private static readonly HashSet<string> PluginNamesToInsertAfter = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "VariableEscape",
+            "VisuMZ_1_MessageCore"
+        };
+
         private async Task AddTranslationPluginAsync()
         {
             if (!CanAddTranslationPlugin())
@@ -238,10 +252,11 @@ namespace RPGMakerUtils.ViewModels
                     for (int i = 0; i < plugins.Count; i++)
                     {
                         string pluginName = (string)plugins[i]["name"] ?? string.Empty;
-                        string fileName = Path.GetFileName(pluginName.Replace('\\', '/'));
+                        string fileName = GetPluginFileName(pluginName);
+
                         bool enabled = (bool?)plugins[i]["status"] == true;
                         if (enabled &&
-                            string.Equals(fileName, "VariableEscape", StringComparison.OrdinalIgnoreCase)
+                            PluginNamesToInsertAfter.Contains(fileName)
                         )
                         {
                             insertIdx = i + 1;
