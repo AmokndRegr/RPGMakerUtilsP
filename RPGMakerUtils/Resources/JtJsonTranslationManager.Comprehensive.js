@@ -2,18 +2,19 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.13.10.6 Galv plugins primary support
+ * @patch ver 0.14.10.3 Estriole(EST) plugins primary support
+ *        ver 0.13.10.6 Galv plugins primary support
  *        ver 0.12.05.10 VisuStella MZ plugins limited support
- *        ver 0.11.10.6 Lulu's Church plugins primary support
+ *        ver 0.11.10.6 Lulu's Church(LL) plugins primary support
  *        ver 0.10.05.8 NUUN plugins essential support, paywalled instances omitted
  *        ver 0.9.10.5 Torigoya plugins primary support
  *        ver 0.8.10.14 DarkPlasma plugins primary support
  *        ver 0.7.05.32 FTKR MV plugins support
  *        ver 0.6.05.16 YEP MV plugins support
- *        ver 0.5.05.5 tomoaky MV plugins support
+ *        ver 0.5.05.5 tomoaky(TM) MV plugins support
  *        ver 0.4.10.11 MOG plugins primary support
  *        ver 0.3.10.2 MKR plugins primary support
- *        ver 0.2.10.5 munokura plugins primary support
+ *        ver 0.2.10.5 munokura(MNKR) plugins primary support
  *        ver 0.1.10.0 triacontane plugins primary support
  * @memo    1. Game_Message.newPage rarely used, discard.
  *          2. WishListForFusionItem n NotifyWishList from DarkPlasma may need rework after Torigoya patch.
@@ -10293,6 +10294,109 @@
         Window_Message._jtGALV_MessageBustsMZPatched = true;
     }
 
+    //EST_PHONE_MENU_MZ.js
+    //1.1
+    //MZ
+    function patch_EST_PHONE_MENU_MZ() {
+        if (
+            Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof EST === 'undefined' || !EST.PhoneMenu ||
+            typeof Window_PhoneCommand === 'undefined' ||
+            typeof Scene_Phone === 'undefined' ||
+            Game_System._jtEST_PHONE_MENU_MZPatched
+        ) return;
+        [
+            [Game_System.prototype, 'fullPhoneMenu'],
+            [Window_PhoneCommand.prototype, 'addMainCommands'],
+            [Scene_Phone.prototype, 'onPhoneMenuOk']
+        ].forEach(target => {
+            const ori = target[0][target[1]];
+            if (typeof ori === 'function') {
+                target[0][target[1]] = function () {
+                    return TranslationManager.fetchRawData(() => ori.apply(this, arguments));
+                }
+            }
+        });
+        Game_System._jtEST_PHONE_MENU_MZPatched = true;
+    }
+
+    //EST_PHONE_ADDON_BASICMENU.js
+    //1.2
+    //MZ
+    function patch_EST_PHONE_ADDON_BASICMENU() {
+        if (
+            Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof EST === 'undefined' || !EST.PhoneMenu ||
+            typeof Window_PhoneHelp === 'undefined' ||
+            typeof Window_PhoneAddonStatus === 'undefined' ||
+            Window_PhoneHelp._jtEST_PHONE_ADDON_BASICMENUPatched
+        ) return;
+        function _wrapSplitDrawText(prototype, method) {
+            const ori = prototype[method];
+            if (typeof ori !== 'function') return;
+            prototype[method] = function () {
+                const _descriptor = Object.getOwnPropertyDescriptor(this, 'drawText');
+                const _drawT = this.drawText;
+                this.drawText = function () {
+                    return TranslationManager.skipPluginTrans(() => _drawT.apply(this, arguments));
+                };
+                try {
+                    return ori.apply(this, arguments);
+                } finally {
+                    if (_descriptor) {
+                        Object.defineProperty(this, 'drawText', _descriptor);
+                    }
+                    else {
+                        delete this.drawText;
+                    }
+                };
+            }
+        };
+        _wrapSplitDrawText(Window_PhoneHelp.prototype, 'refresh');
+        _wrapSplitDrawText(Window_PhoneAddonStatus.prototype, 'drawActorProfile');
+        [
+            [Window_PhoneAddonSelection.prototype, 'drawItem'],
+            [Window_PhoneAddonStatus.prototype, 'drawExpGauge']
+        ].forEach(target => {
+            const ori = target[0][target[1]];
+            if (typeof ori !== 'function') return;
+            target[0][target[1]] = function () {
+                return TranslationManager.fetchRawData(() => ori.apply(this, arguments));
+            };
+        });
+        const _drawTitle = Window_PhoneAddonSave.prototype.drawTitle;
+        if (typeof _drawTitle === 'function') {
+            Window_PhoneAddonSave.prototype.drawTitle = function () {
+                return TranslationManager.skipPluginTrans(() => _drawTitle.apply(this, arguments));
+            }
+        }
+        Window_PhoneHelp._jtEST_PHONE_ADDON_BASICMENUPatched = true;
+    }
+
+    //EST_PRICE_FORMULA_MZ.js
+    //1.0
+    //MZ
+    function patch_EST_PRICE_FORMULA_MZ() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof EST === 'undefined' ||
+            !EST.PriceFormulaMZ ||
+            typeof EST.PriceFormulaMZ.Window_ShopBuy_price !== 'function' ||
+            typeof EST.PriceFormulaMZ.Scene_Shop_sellingPrice !== 'function' ||
+            EST._jtEST_PRICE_FORMULA_MZPatched
+        ) return;
+        [
+            [Window_ShopBuy.prototype, 'price'],
+            [Scene_Shop.prototype, 'sellingPrice']
+        ].forEach(target => {
+            const ori = target[0][target[1]];
+            target[0][target[1]] = function () {
+                return TranslationManager.fetchRawData(() => TranslationManager.disablePluginTrans(() => ori.apply(this, arguments)));
+            };
+        });
+        EST._jtEST_PRICE_FORMULA_MZPatched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -10408,6 +10512,17 @@
     //1.00
     //MZ
     //assume it should always be used w/ VisuMZ_1_MessageCore ig
+
+    //EST_AUTO_TEXT_COLOR_PLUS.js
+    //1.9
+    //MV
+    //likely not compatible but wont hurt much ig
+    //too complicated to patch w/ YEP message core
+
+    //EST_AUTO_TEXT_COLOR_MZ.js
+    //1.0
+    //MZ
+    //similar as above
 
     //#endregion
 
@@ -10657,6 +10772,9 @@
         patch_Galv_MapTravel();
         patch_GALV_MessageBusts();
         patch_GALV_MessageBustsMZ();
+        patch_EST_PHONE_MENU_MZ();
+        patch_EST_PHONE_ADDON_BASICMENU();
+        patch_EST_PRICE_FORMULA_MZ();
     };
     //#endregion
 
