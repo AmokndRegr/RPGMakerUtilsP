@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.12.05.10 VisuStella MZ plugins limited support
+ * @patch ver 0.13.10.6 Galv plugins primary support
+ *        ver 0.12.05.10 VisuStella MZ plugins limited support
  *        ver 0.11.10.6 Lulu's Church plugins primary support
  *        ver 0.10.05.8 NUUN plugins essential support, paywalled instances omitted
  *        ver 0.9.10.5 Torigoya plugins primary support
@@ -10138,6 +10139,160 @@
         VisuMZ._jtVisuMZ_2_ItemCraftingSysPatched = true;
     }
 
+    //GALV_VisualNovelChoices.js
+    //1.6
+    //MV
+    //1.0
+    //MZ
+    function patch_GALV_VisualNovelChoices() {
+        if (
+            typeof Galv === 'undefined' || !Galv.VNC ||
+            typeof Window_ChoiceList.prototype.setupVNChoices !== 'function' ||
+            Galv._jtGALV_VisualNovelChoicesPatched
+        ) return;
+        const _CEC = Window_ChoiceList.prototype.convertEscapeCharacters;
+        Window_ChoiceList.prototype.convertEscapeCharacters = function (text) {
+            if (typeof text !== 'string' || TranslationManager.isRawData() || TranslationManager._translationDisableDepth > 0 || TranslationManager._translatedSkipDepth > 0) {
+                return _CEC.apply(this, arguments);
+            }
+            arguments[0] = TranslationManager.translate(text);
+            const converted = TranslationManager.skipPluginTrans(() => _CEC.apply(this, arguments));
+            TranslationManager.pushConvertedText(converted);
+            return converted;
+        };
+        let measureDepth = 0;
+        const _itemRFT = Window_ChoiceList.prototype.itemRectForText;
+        Window_ChoiceList.prototype.itemRectForText = function () {
+            if (!$gameSystem.vnChoices) return _itemRFT.apply(this, arguments);
+            measureDepth++;
+            try {
+                return _itemRFT.apply(this, arguments);
+            } finally {
+                measureDepth--;
+            }
+        };
+        const _textWidth = Window_ChoiceList.prototype.textWidth;
+        Window_ChoiceList.prototype.textWidth = function () {
+            if (measureDepth === 0) return _textWidth.apply(this, arguments);
+            return TranslationManager.skipPluginTrans(() => _textWidth.apply(this, arguments));
+        };
+        Galv._jtGALV_VisualNovelChoicesPatched = true;
+    }
+
+    //Galv_MapTravel.js
+    //1.2
+    //MV
+    //1.1
+    //MZ
+    //might not be optimal translating before | splitting
+    function patch_Galv_MapTravel() {
+        if (
+            typeof Galv === 'undefined' ||
+            !Galv.MAPT ||
+            typeof Window_MapTravelLocation === 'undefined' ||
+            typeof Window_MapTravelLocation.prototype.refresh !== 'function' ||
+            Galv._jtGalv_MapTravelPatched
+        ) return;
+        const _refresh = Window_MapTravelLocation.prototype.refresh;
+        Window_MapTravelLocation.prototype.refresh = function () {
+            if (TranslationManager._translationDisableDepth > 0 || TranslationManager._translatedSkipDepth > 0) {
+                return _refresh.apply(this, arguments);
+            }
+            this.contents.clear();
+            if (Galv.MAPT.active) {
+                const desc = TranslationManager.translate(this.data().desc);
+                const lines = desc.split('|');
+                TranslationManager.skipPluginTrans(() => {
+                    for (let i = 0; i < lines.length; i++) {
+                        this.drawTextEx(lines[i], this.textPadding(), this.lineHeight() * i);
+                    }
+                });
+                this._currentLocation = Galv.MAPT.active;
+            }
+        };
+        Galv._jtGalv_MapTravelPatched = true;
+    }
+
+    //GALV_MessageBusts.js
+    //2.8
+    //MV
+    //not rlly necessary, but no idea how mtool process \BST[]
+    //maybe check dict when installing?
+    function patch_GALV_MessageBusts() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.Galv_MessageBusts ||
+            typeof Window_Message.prototype.obtainSpecialParam !== 'function' ||
+            Window_Message._jtGALV_MessageBustsPatched
+        ) return;
+        let _bustMaskDepth = 0;
+        function _collectBustMasks(text) {
+            const masks = [];
+            const prefixes = /[\\\x1b]+/g;
+            let prefix;
+            while ((prefix = prefixes.exec(text))) {
+                if (prefix[0].length % 2 === 0) continue;
+                const param = /^BST\[(.*)]/i.exec(text.slice(prefixes.lastIndex));
+                if (!param) continue;
+                const end = prefixes.lastIndex + param[0].length;
+                masks.push([prefixes.lastIndex - 1, end]);
+                prefixes.lastIndex = end;
+            }
+            return masks;
+        };
+        const _translate = TranslationManager.translate;
+        TranslationManager.translate = function (text, detectStartWhitespace, times, cache, mask) {
+            if (_bustMaskDepth > 0 && typeof text === 'string') {
+                const ranges = _collectBustMasks(text);
+                if (ranges.length > 0) {
+                    return _translate.call(
+                        this, text, detectStartWhitespace, times, cache,
+                        (Array.isArray(mask) ? mask : []).concat(ranges)
+                    );
+                }
+            }
+            return _translate.apply(this, arguments);
+        };
+        const _CEC = Window_Message.prototype.convertEscapeCharacters;
+        Window_Message.prototype.convertEscapeCharacters = function () {
+            _bustMaskDepth++;
+            try {
+                return _CEC.apply(this, arguments);
+            } finally {
+                _bustMaskDepth--;
+            }
+        };
+        Window_Message._jtGALV_MessageBustsPatched = true;
+    }
+
+    //GALV_MessageBustsMZ.js
+    //1.2
+    //MZ
+    //little diff from MV
+    function patch_GALV_MessageBustsMZ() {
+        if (
+            Utils.RPGMAKER_NAME !== "MZ" ||
+            typeof Imported === "undefined" ||
+            !Imported.Galv_MessageBusts ||
+            typeof Window_Message.prototype.obtainBustParam !== "function" ||
+            Window_Message._jtGALV_MessageBustsMZPatched
+        ) return;
+        const _CECR = _Window_Base_convertEscapeCharacters;
+        const _CEC = Window_Message.prototype.convertEscapeCharacters;
+        Window_Message.prototype.convertEscapeCharacters = function () {
+            const _rawText = TranslationManager.fetchRawData(() => TranslationManager.disablePluginTrans(() => _CECR.apply(this, arguments)));
+            const _rawCmd = _rawText.match(/\x1bBST\[[^\]]*\]/gi) || [];
+            const _displayText = _CEC.apply(this, arguments);
+            if (!_rawCmd.length) return _displayText; //no BST in text
+            let index = 0;
+            const result = _displayText.replace(/\x1bBST\[[^\]]*\]/gi, command => _rawCmd[index++] || command);
+            if (result !== _displayText) TranslationManager.pushConvertedText(result);
+            return result;
+        };
+        Window_Message._jtGALV_MessageBustsMZPatched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -10498,6 +10653,10 @@
         patch_VisuMZ_4_DiceRollsRngSeeds();
         patch_VisuMZ_4_CombatLog();
         patch_VisuMZ_2_ItemCraftingSys();
+        patch_GALV_VisualNovelChoices();
+        patch_Galv_MapTravel();
+        patch_GALV_MessageBusts();
+        patch_GALV_MessageBustsMZ();
     };
     //#endregion
 
