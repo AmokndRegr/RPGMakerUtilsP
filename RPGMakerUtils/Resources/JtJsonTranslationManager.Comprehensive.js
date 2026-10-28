@@ -3768,40 +3768,72 @@
             typeof DataManager.saveGameAuto !== 'function' ||
             Game_Interpreter._jtNobleMushroomPatched
         ) return;
-
         const bmCommands = new Set([
             'タイプ変更', 'CHANGE_TYPE',
             'ノベルウィンドウ位置設定', 'SET_RECT_NOVEL_WINDOW',
-            'ノベルコマンド位置設定', 'SET_RECT_NOVEL_COMMAND'
+            'ノベルコマンド位置設定', 'SET_RECT_NOVEL_COMMAND',
+            'チャプター設定', 'SET_CHAPTER'
         ])
-
         const _pluginCBM = Game_Interpreter.prototype.pluginCommandBlueMushroom;
         Game_Interpreter.prototype.pluginCommandBlueMushroom = function (command, args) {
             if (typeof command !== 'string' ||
                 !bmCommands.has(command.toUpperCase())) {
                 return _pluginCBM.apply(this, arguments);
             }
-            return TranslationManager.fetchRawData(() => {
-                return TranslationManager.disablePluginTrans(() => {
-                    return _pluginCBM.apply(this, arguments);
-                })
-            })
+            return TranslationManager.fetchRawData(() => TranslationManager.disablePluginTrans(() => _pluginCBM.apply(this, arguments)));
         }
-
         const _popupNIP = Game_Message.prototype.popupNameInputPrompt;
         Game_Message.prototype.popupNameInputPrompt = function () {
-            return TranslationManager.fetchRawData(() => {
-                return _popupNIP.apply(this, arguments);
-            })
+            return TranslationManager.fetchRawData(() => _popupNIP.apply(this, arguments));
         }
-
         const _saveGA = DataManager.saveGameAuto;
         DataManager.saveGameAuto = function () {
-            return TranslationManager.fetchRawData(() => {
-                return _saveGA.apply(this, arguments);
-            })
+            return TranslationManager.fetchRawData(() => _saveGA.apply(this, arguments));
         }
-
+        function _skipTrans(prototype, method) {
+            const ori = prototype[method];
+            if (typeof ori !== 'function') return;
+            prototype[method] = function () {
+                return TranslationManager.skipPluginTrans(() => ori.apply(this, arguments));
+            };
+        };
+        function _patchSelectedNovelWindow() {
+            if (typeof Window_Message.prototype.isNovelWindow !== 'function' ||
+                !Window_Message.prototype.isNovelWindow()
+            ) return;
+            if (!Window_Message._jtNobleMushroomNovelPatched) {
+                _skipTrans(Window_Message.prototype, 'processNormalCharacter');
+                _skipTrans(Window_Message.prototype, 'processAutoWordWrap');
+                Window_Message._jtNobleMushroomNovelPatched = true;
+            }
+            if (typeof Window_ChoiceList.prototype.getAllTextHeight !== 'function' || Window_ChoiceList._jtNobleMushroomNovelPatched) return;
+            const _commandName = Window_ChoiceList.prototype.commandName;
+            Window_ChoiceList.prototype.commandName = function (index) {
+                const text = _commandName.apply(this, arguments);
+                if (TranslationManager.isRawData() || TranslationManager._translationDisableDepth > 0 || TranslationManager._translatedSkipDepth > 0) return text;
+                const source = Window_Command.prototype.commandName.call(this, index);
+                if (typeof text !== 'string' || typeof source !== 'string') return text;
+                const _prefixLength = text.length - source.length;
+                if (_prefixLength < 0 || text.slice(_prefixLength) !== source) return text;
+                const result = text.slice(0, _prefixLength) + TranslationManager.translate(source);
+                TranslationManager._translatedSet.add(result);
+                return result;
+            };
+            _skipTrans(Window_ChoiceList.prototype, 'processAutoWordWrap');
+            Window_ChoiceList._jtNobleMushroomNovelPatched = true;
+        };
+        [
+            Scene_Map.prototype,
+            Scene_MenuBase.prototype
+        ].forEach(prototype => {
+            const _changeIWM = prototype.changeImplementationWindowMessage;
+            if (typeof _changeIWM !== 'function') return;
+            prototype.changeImplementationWindowMessage = function () {
+                const result = _changeIWM.apply(this, arguments);
+                _patchSelectedNovelWindow();
+                return result;
+            }
+        });
         Game_Interpreter._jtNobleMushroomPatched = true;
     }
 
@@ -6261,23 +6293,7 @@
             const _convertMT = Window_MessageBacklog.prototype.convertMessageText;
             const _removeMBOC = Window_MessageBacklog.prototype.removeMessageBoxOnlyCodes;
             const _convertNC = Window_MessageBacklog.prototype.convertNameboxCodes;
-            const _addC = Window_MessageBacklog.prototype.addCommand;
-            let backLogLineBuildDepth = 0;
-            const _addIL = Window_MessageBacklog.prototype.addIndividualLines;
-            Window_MessageBacklog.prototype.addIndividualLines = function () {
-                backLogLineBuildDepth++;
-                try {
-                    return _addIL.apply(this, arguments);
-                } finally {
-                    backLogLineBuildDepth--;
-                }
-            }
-            Window_MessageBacklog.prototype.addCommand = function () {
-                if (backLogLineBuildDepth > 0 && TranslationManager._translatedSkipDepth > 0) {
-                    return _Window_Command_addCommand.apply(this, arguments);
-                }
-                return _addC.apply(this, arguments);
-            }
+            const _backlogASC = Window_ChoiceList.prototype.backlogAddSelectedChoice;
             let preparedInput = 0;
             function _known() {
                 return $gameSystem._jtYEPBacklogPrepared ||
@@ -6344,6 +6360,22 @@
                     return output;
                 } finally {
                     _frame = previous;
+                }
+            };
+            Window_ChoiceList.prototype.backlogAddSelectedChoice = function () {
+                const _ownCommandName = Object.getOwnPropertyDescriptor(this, 'commandName');
+                const _commandName = this.commandName;
+                this.commandName = function () {
+                    return TranslationManager.translate(_commandName.apply(this, arguments));
+                };
+                try {
+                    return _backlogASC.apply(this, arguments);
+                } finally {
+                    if (_ownCommandName) {
+                        Object.defineProperty(this, 'commandName', _ownCommandName);
+                    } else {
+                        delete this.commandName;
+                    }
                 }
             };
             for (const key of ['addIndividualLines', 'drawItem']) {
@@ -6501,9 +6533,9 @@
                 dataItems: $dataItems,
                 dataWeapons: $dataWeapons,
                 dataArmors: $dataArmors,
-                indItems: this._independentItems,
-                indWeapons: this._independentWeapons,
-                indArmors: this._independentArmors
+                dmItems: this._independentItems,
+                dmWeapons: this._independentWeapons,
+                dmArmors: this._independentArmors
             };
             const result = _prepareNGPD.apply(this, arguments);
             const backup = this._ngpData;
@@ -6530,9 +6562,9 @@
                 _restoreFields(backup.dataItems, $dataItems);
                 _restoreFields(backup.dataWeapons, $dataWeapons);
                 _restoreFields(backup.dataArmors, $dataArmors);
-                _restoreFields(backup.indItems, this._independentItems);
-                _restoreFields(backup.indWeapons, this._independentWeapons);
-                _restoreFields(backup.indArmors, this._independentArmors);
+                _restoreFields(backup.dmItems, this._independentItems);
+                _restoreFields(backup.dmWeapons, this._independentWeapons);
+                _restoreFields(backup.dmArmors, this._independentArmors);
             }
             return result;
         }
@@ -6624,13 +6656,17 @@
                 Object.defineProperty(item, key, {
                     configurable: descriptor.configurable,
                     enumerable: descriptor.enumerable,
-                    get: descriptor.get,
+                    get: function () {
+                        if (TranslationManager.isJsonExEncoding()) return field.raw;
+                        return descriptor.get.call(this);
+                    },
                     set: function (value) {
                         if (TranslationManager.isJsonExEncoding()) return;
                         field.raw = value;
                         field.translated = TranslationManager.translate(value);
                     }
                 });
+                field.getter = Object.getOwnPropertyDescriptor(item, key).get;
                 installed.add(field);
             })
         }
@@ -6709,6 +6745,11 @@
             _installInfoText('drawInfoTextBottom', 'infoTextBottom');
         }
         if (typeof Window_ItemActionCommand !== 'undefined') {
+            const _addC = Window_ItemActionCommand.prototype.addCommand;
+            Window_ItemActionCommand.prototype.addCommand = function (name, symbol, enabled, ext) {
+                if (TranslationManager._translationDisableDepth > 0) return _addC.apply(this, arguments);
+                return _addC.call(this, TranslationManager.translate(name), symbol, enabled, ext);
+            };
             const _drawItem = Window_ItemActionCommand.prototype.drawItem;
             Window_ItemActionCommand.prototype.drawItem = function () {
                 return TranslationManager.skipPluginTrans(() => {
@@ -6913,7 +6954,37 @@
         Game_Actor.prototype.customDurabilityBreakEval = wrapRaw(Game_Actor.prototype.customDurabilityBreakEval);
         Game_Action.prototype.durabilityEval = wrapRaw(Game_Action.prototype.durabilityEval);
         Scene_Item.prototype.onRepairEval = wrapRaw(Scene_Item.prototype.onRepairEval);
+        Window_ItemActionCommand.prototype.addRepairCommand = wrapRaw(Window_ItemActionCommand.prototype.addRepairCommand);
         Imported._jtYEP_X_ItemDurabilityPatched = true;
+    }
+
+    //YEP_X_ItemDisassemble.js
+    //1.06
+    //MV
+    function patch_YEP_X_ItemDisassemble() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Imported === 'undefined' ||
+            !Imported.YEP_ItemCore ||
+            !Imported.YEP_X_ItemDisassemble ||
+            typeof Window_ItemActionCommand === 'undefined' ||
+            typeof Window_DisassemblePool === 'undefined' ||
+            Imported._jtYEP_X_ItemDisassemblePatched
+        ) return;
+        const wrapRaw = function (fn) {
+            return function () {
+                return TranslationManager.fetchRawData(() => {
+                    return fn.apply(this, arguments);
+                })
+            }
+        };
+        Window_ItemActionCommand.prototype.addDisassembleCommand = wrapRaw(Window_ItemActionCommand.prototype.addDisassembleCommand);
+        Window_DisassemblePool.prototype.drawDisassembleTypePool = wrapRaw(Window_DisassemblePool.prototype.drawDisassembleTypePool);
+        const _drawTE = Window_DisassemblePool.prototype.drawTextEx;
+        Window_DisassemblePool.prototype.drawTextEx = function () {
+            return TranslationManager.fetchTranslatedData(() => _drawTE.apply(this, arguments));
+        };
+        Imported._jtYEP_X_ItemDisassemblePatched = true;
     }
 
     //YEP_X_ItemRequirements.js
@@ -10693,6 +10764,7 @@
         patch_YEP_X_EquipRequirements();
         patch_YEP_X_HideShowShopItems();
         patch_YEP_X_ItemDurability();
+        patch_YEP_X_ItemDisassemble();
         patch_YEP_X_ItemRequirements();
         patch_YEP_X_EquipSkillTiers();
         patch_YEP_KeyboardConfig();
