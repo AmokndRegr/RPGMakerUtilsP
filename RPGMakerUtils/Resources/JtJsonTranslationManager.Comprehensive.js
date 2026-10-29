@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.14.10.3 Estriole(EST) plugins primary support
+ * @patch ver 0.15.05.8 newrpg(NRP) MV plugins support
+ *        ver 0.14.10.3 Estriole(EST) plugins primary support
  *        ver 0.13.10.6 Galv plugins primary support
  *        ver 0.12.05.10 VisuStella MZ plugins limited support
  *        ver 0.11.10.6 Lulu's Church(LL) plugins primary support
@@ -620,7 +621,10 @@
         if (!hasMask && text.includes('\n')) {
             const lines = text.split('\n');
             const translatedLines = lines.map(line => this.translate(line, detectStartWhitespace, times));
-            return translatedLines.join('\n');
+            const translatedText=translatedLines.join('\n');
+            this._translatedSet.add(translatedText);
+            return translatedText;
+            //rlly necessary tho?
         }
 
         let leadingSpaces = '';
@@ -10468,6 +10472,199 @@
         EST._jtEST_PRICE_FORMULA_MZPatched = true;
     }
 
+    //NRP_BattleTargetCursor.js
+    //1.05
+    //MV
+    function patch_NRP_BattleTargetCursor() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Window_BattleEnemyName === 'undefined' ||
+            typeof Window_BattleActorName === 'undefined' ||
+            Window_BattleActorName._jtNRP_BattleTargetCursorPatched
+        ) return;
+        [
+            Window_BattleEnemyName.prototype,
+            Window_BattleActorName.prototype
+        ].forEach(prototype => {
+            ['showTargetName', 'drawItem'].forEach(method => {
+                const ori = prototype[method];
+                if (typeof ori !== 'function') return;
+                prototype[method] = function () {
+                    return TranslationManager.fetchRawData(() => ori.apply(this, arguments));
+                };
+            });
+            const _CEC = prototype.convertEscapeCharacters;
+            prototype.convertEscapeCharacters = function () {
+                return TranslationManager.fetchTranslatedData(() => {
+                    const result = _CEC.apply(this, arguments);
+                    if (TranslationManager._translationDisableDepth === 0 && TranslationManager._translatedSkipDepth === 0) {
+                        TranslationManager.pushConvertedText(result);
+                    }
+                    return result;
+                });
+            };
+        });
+        Window_BattleActorName._jtNRP_BattleTargetCursorPatched = true;
+    }
+
+    //NRP_CallEnemy.js
+    //1.06
+    //MV
+    function patch_NRP_CallEnemy() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_Action.prototype.callEnemy !== 'function' ||
+            typeof Window_BattleLog.prototype.displayCallEnemy !== 'function' ||
+            Game_Action._jtNRP_CallEnemyPatched
+        ) return;
+        const _makeUN = Game_Troop.prototype.makeUniqueNames;
+        Game_Troop.prototype.makeUniqueNames = function () {
+            return TranslationManager.fetchRawData(() => _makeUN.apply(this, arguments));
+        };
+        const _displayCE = Window_BattleLog.prototype.displayCallEnemy;
+        Window_BattleLog.prototype.displayCallEnemy = function () {
+            return TranslationManager.fetchRawData(() => _displayCE.apply(this, arguments));
+        };
+        Game_Action._jtNRP_CallEnemyPatched = true;
+    }
+
+    //NRP_CombinationSkill.js
+    //1.40
+    //MV
+    //maybe remove the text change detection in CEC override?
+    function patch_NRP_CombinationSkill() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_Action.prototype.setCsMembers !== 'function' ||
+            typeof Game_Action.prototype.csMembers !== 'function' ||
+            Game_Action._jtNRP_CombinationSkillPatched
+        ) return;
+        const _displayA = Window_BattleLog.prototype.displayAction;
+        Window_BattleLog.prototype.displayAction = function (subject, item) {
+            if (item && item.meta && (item.meta.CS_Actors || item.meta.CS_Battlers || item.meta.CS_Enemys)) {
+                return TranslationManager.fetchRawData(() => _displayA.apply(this, arguments));
+            }
+            return _displayA.apply(this, arguments);
+        };
+        const _CEC = Window_BattleLog.prototype.convertEscapeCharacters;
+        Window_BattleLog.prototype.convertEscapeCharacters = function () {
+            const text = _CEC.apply(this, arguments);
+            if (!TranslationManager.isRawData() && TranslationManager._translationDisableDepth === 0) {
+                TranslationManager.pushConvertedText(text);
+            }
+            return text;
+        };
+        Game_Action._jtNRP_CombinationSkillPatched = true;
+    }
+
+    //NRP_ChargeSkill.js
+    //1.05
+    //MV
+    function patch_NRP_ChargeSkill() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_BattlerBase.prototype.updateChargeStateTurns !== 'function' ||
+            Game_BattlerBase._jtNRP_ChargeSkillPatched
+        ) return;
+        const _startA = BattleManager.startAction;
+        BattleManager.startAction = function () {
+            const subject = this._subject;
+            const action = subject && subject.currentAction();
+            const item = action && action.item();
+            if (!item || !item.meta || !item.meta.ChargeState) return _startA.apply(this, arguments);
+            return TranslationManager.fetchRawData(() => _startA.apply(this, arguments));
+        };
+        const _displayA = Window_BattleLog.prototype.displayAction;
+        Window_BattleLog.prototype.displayAction = function (subject, item) {
+            const chargeSkills = subject && subject._chargeSkills;
+            const hasChargeState = chargeSkills && subject._states.some(stateId => !!chargeSkills[stateId]);
+            if (!hasChargeState && !(item && item.meta && item.meta.ChargeState)) return _displayA.apply(this, arguments);
+            return TranslationManager.fetchRawData(() => _displayA.apply(this, arguments));
+        };
+        Game_BattlerBase._jtNRP_ChargeSkillPatched = true;
+    }
+
+    //NRP_Substitute.js
+    //1.03
+    //MV
+    function patch_NRP_Substitute() {
+        if (
+            typeof Game_Battler.prototype.getSubstituteData !== 'function' ||
+            typeof Game_Action.prototype.makeSubstituteTargets !== 'function' ||
+            Game_Action._jtNRP_SubstitutePatched
+        ) return;
+        const _getSD = Game_Battler.prototype.getSubstituteData;
+        Game_Battler.prototype.getSubstituteData = function () {
+            return TranslationManager.fetchRawData(() => _getSD, apply(this, arguments));
+        };
+        Game_Action._jtNRP_SubstitutePatched = true;
+    }
+
+    //NRP_OriginalRewards.js
+    //1.00
+    //MV
+    function patch_NRP_OriginalRewards() {
+        if (
+            typeof Game_Enemy.prototype.customReward !== "function" ||
+            Game_Enemy._jtNRP_OriginalRewardsPatched
+        ) return;
+        const _customC = Game_Enemy.prototype.customReward;
+        Game_Enemy.prototype.customReward = function () {
+            return TranslationManager.fetchRawData(() => TranslationManager.disablePluginTrans(() => _customC.apply(this, arguments)));
+        };
+        Game_Enemy._jtNRP_OriginalRewardsPatched = true;
+    }
+
+    //NRP_U_SkillTreeReserve.js
+    //1.001
+    //MV
+    function patch_NRP_U_SkillTreeReserve() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof SkillTreeClassAlias === 'undefined' ||
+            !SkillTreeClassAlias.Scene_SkillTree ||
+            typeof SkillTreeClassAlias.Scene_SkillTree.prototype.createNodeOpenReserveWindow !== 'function' ||
+            typeof Game_Actor.prototype.gainSp !== 'function' ||
+            SkillTreeClassAlias._jtNRP_U_SkillTreeReservePatched
+        ) return;
+        const _createNORW = SkillTreeClassAlias.Scene_SkillTree.prototype.createNodeOpenReserveWindow;
+        SkillTreeClassAlias.Scene_SkillTree.prototype.createNodeOpenReserveWindow = function () {
+            const result = TranslationManager.fetchRawData(() => _createNORW.apply(this, arguments));
+            const _reserveWindow = this._windowNodeOpenReserve;
+            const _refresh = _reserveWindow.refresh;
+            _reserveWindow.refresh = function () {
+                return TranslationManager.fetchRawData(() => _refresh.apply(this, arguments));
+            };
+        };
+        const _gainSp = Game_Actor.prototype.gainSp;
+        Game_Actor.prototype.gainSp = function () {
+            return TranslationManager.fetchRawData(() => _gainSp.apply(this, arguments));
+        };
+        SkillTreeClassAlias._jtNRP_U_SkillTreeReservePatched = true;
+    }
+
+    //NRP_WindowBattleLogLayout.js
+    //1.05
+    //MV
+    function patch_NRP_WindowBattleLogLayout() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Window_BattleLog.prototype.getBack !== 'function' ||
+            typeof Window_BattleLog.prototype.startGradientSize !== 'function' ||
+            typeof Window_BattleLog.prototype.endGradientSize !== 'function' ||
+            Window_BattleLog._jtNRP_WindowBattleLogLayoutPatched
+        ) return;
+        const _CEC = Window_BattleLog.prototype.convertEscapeCharacters;
+        Window_BattleLog.prototype.convertEscapeCharacters = function () {
+            const result = _CEC.apply(this, arguments);
+            if (!TranslationManager.isRawData() && TranslationManager._translationDisableDepth === 0 && TranslationManager._translatedSkipDepth === 0) {
+                TranslationManager.pushConvertedText(result);
+            }
+            return result;
+        };
+        Window_BattleLog._jtNRP_WindowBattleLogLayoutPatched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -10594,6 +10791,21 @@
     //1.0
     //MZ
     //similar as above
+
+    //NRP_AutoHeal.js
+    //1.03
+    //MV/MZ
+    //possible restrans in log
+
+    //NRP_LevelUpDirection.js
+    //1.022
+    //MV
+    //possible retrans
+
+    //NRP_ForgetLowerSkill.js
+    //1.031
+    //MV
+    //same as above
 
     //#endregion
 
@@ -10847,6 +11059,14 @@
         patch_EST_PHONE_MENU_MZ();
         patch_EST_PHONE_ADDON_BASICMENU();
         patch_EST_PRICE_FORMULA_MZ();
+        patch_NRP_BattleTargetCursor();
+        patch_NRP_CallEnemy();
+        patch_NRP_CombinationSkill();
+        patch_NRP_ChargeSkill();
+        patch_NRP_Substitute();
+        patch_NRP_OriginalRewards();
+        patch_NRP_U_SkillTreeReserve();
+        patch_NRP_WindowBattleLogLayout();
     };
     //#endregion
 
