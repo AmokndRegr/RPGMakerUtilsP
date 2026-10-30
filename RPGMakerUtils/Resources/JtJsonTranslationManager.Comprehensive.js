@@ -11271,6 +11271,11 @@
     Window_BattleLog.prototype.addText = function (text) {
         _Window_BattleLog_addText.call(this, TranslationManager.translate(text));
     };
+    //Window_BattleLog.prototype.addText follow up
+    const _Window_BattleLog_drawLineText=Window_BattleLog.prototype.drawLineText;
+    Window_BattleLog.prototype.drawLineText=function(){
+        return TranslationManager.skipPluginTrans(()=>_Window_BattleLog_drawLineText.apply(this,arguments));
+    };
 
     //Bitmap related single char retrans problem should be fixed by these two patches
     if (typeof Window_Base.prototype.flushTextState === 'function') {
