@@ -2267,6 +2267,28 @@
                 return _getTI.apply(this, arguments);
             })
         };
+        if (typeof Window_Message.prototype.createVirtualTextState === 'function') {
+            const _createVTS = Window_Message.prototype.createVirtualTextState;
+            const _CEC = Window_Message.prototype.convertEscapeCharacters;
+            let _virtualWindow = null;
+            Window_Message.prototype.createVirtualTextState = function () {
+                const _prevWindow = _virtualWindow;
+                _virtualWindow = this;
+                try {
+                    return _createVTS.apply(this, arguments);
+                } finally {
+                    _virtualWindow = _prevWindow;
+                }
+            };
+            //again, maybe remove the detection be4 pushConvertedText?
+            Window_Message.prototype.convertEscapeCharacters = function () {
+                const converted = _CEC.apply(this, arguments);
+                if (_virtualWindow === this && !TranslationManager.isRawData() && TranslationManager._translationDisableDepth === 0 && TranslationManager._translatedSkipDepth === 0) {
+                    TranslationManager.pushConvertedText(converted);
+                }
+                return converted;
+            };
+        }
         Game_System._jtMessageWindowPopupMZPatched = true;
     }
 
@@ -11253,6 +11275,165 @@
         Game_Interpreter._jtRandomTreasurePatched = true;
     }
 
+    //MaterialBase.js
+    //1.01
+    //MZ
+    function patch_MaterialBase() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof PluginManagerEx === 'undefined' ||
+            typeof Game_System.prototype.getMaterialImage !== 'function' ||
+            typeof Game_System.prototype.getMaterialAudio !== 'function' ||
+            Game_System._jtMaterialBasePatched
+        ) return;
+        [
+            'getMaterialImage',
+            'getMaterialAudio',
+            'setMaterialImage',
+            'setMaterialAudio'
+        ].forEach(method => {
+            const ori = Game_System.prototype[method];
+            if (typeof ori !== 'function') return;
+            Game_System.prototype[method] = function () {
+                return TranslationManager.fetchRawData(() => TranslationManager.disablePluginTrans(() => ori.apply(this, arguments)));
+            };
+        });
+        [
+            'CHANGE_IMAGE',
+            'CHANGE_AUDIO',
+            'SHOW_PICTURE',
+            'PLAY_AUDIO'
+        ].forEach(command => {
+            const key = 'MaterialBase:' + command;
+            const ori = PluginManager._commands[key];
+            if (typeof ori !== 'function') return;
+            PluginManager._commands[key] = function () {
+                return TranslationManager.fetchRawData(() => TranslationManager.disablePluginTrans(() => ori.apply(this, arguments)));
+            };
+        });
+        Game_System._jtMaterialBasePatched = true;
+    }
+
+    //ItemCombinationMZ.js
+    //1.1.0
+    //MZ
+    //Scene_CraftingMenu detection isnt 100p safe
+    function patch_ItemCombinationMZ() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Game_Party.prototype.populateCraftingRecipes !== 'function' ||
+            Game_Party._jtItemCombinationMZPatched
+        ) return;
+        const _populateCR = Game_Party.prototype.populateCraftingRecipes;
+        Game_Party.prototype.populateCraftingRecipes = function () {
+            return TranslationManager.fetchRawData(() => _populateCR.apply(this, arguments));
+        };
+        ['learn', 'forget', 'changeChance'].forEach(command => {
+            const key = 'ItemCombinationMZ:' + command;
+            const ori = PluginManager._commands[key];
+            if (typeof ori !== 'function') return;
+            PluginManager._commands[key] = function () {
+                return TranslationManager.fetchRawData(() => ori.apply(this, arguments));
+            };
+        });
+        function _hasMethods(target, names) {
+            return !!target && names.every(name => typeof target[name] === 'function');
+        };
+        function _hasOwnMethods(target, names) {
+            return !!target && names.every(name => typeof target[name] === 'function' && Object.prototype.hasOwnProperty.call(target, name));
+        };
+        const _patchedPrototypes = new WeakSet();
+        const _initialize = Window_Command.prototype.initialize;
+        Window_Command.prototype.initialize = function () {
+            const proto = Object.getPrototypeOf(this);
+            if (
+                _hasMethods(SceneManager._scene, ['updateDetails', 'createDetailsWindow', 'createCombineWindow', 'onDetailsOk', 'onDetailsCancel']) &&
+                _hasOwnMethods(proto, ['numVisibleRows', 'addOriginalCommands', 'isCurrentItemEnabled', 'selectLast', 'makeCommandList', 'processOk']) &&
+                !_patchedPrototypes.has(proto)
+            ) {
+                const _addOC = proto.addOriginalCommands;
+                proto.addOriginalCommands = function () {
+                    return TranslationManager.fetchRawData(() => _addOC.apply(this, arguments));
+                };
+                _patchedPrototypes.add(proto);
+            }
+            return _initialize.apply(this, arguments);
+        };
+        const _initializeAno = Window_Base.prototype.initialize;
+        Window_Base.prototype.initialize = function () {
+            const proto = Object.getPrototypeOf(this);
+            if (
+                _hasOwnMethods(proto, ['drawDetailsName', 'drawIngredient', 'drawComboChance', 'drawFailure']) &&
+                !_patchedPrototypes.has(proto)
+            ) {
+                const _drawDW = proto.drawDetailsName;
+                proto.drawDetailsName = function () {
+                    return TranslationManager.skipPluginTrans(() => _drawDW.apply(this, arguments));
+                };
+                _patchedPrototypes.add(proto);
+            };
+            return _initializeAno.apply(this, arguments);
+        };
+        Game_Party._jtItemCombinationMZPatched = true;
+    }
+
+    //ExtraWindow.js
+    //1.01
+    //MZ
+    //not rlly inline w/ average patch logic
+    function patch_ExtraWindow() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            typeof Window_SceneExtra === 'undefined' ||
+            Window_SceneExtra._jtExtraWindowPatched ||
+            typeof Window_SceneExtra.prototype.refresh !== 'function' ||
+            typeof Window_SceneExtra.prototype.drawAllText !== 'function'
+        ) return;
+        Window_SceneExtra.prototype.drawAllText = function () {
+            const newText = TranslationManager.fetchRawData(() => PluginManagerEx.convertEscapeCharacters(this._data.Text));
+            if (this._text !== newText) {
+                this._text = newText;
+                this.contents.clear();
+                this.drawTextEx(newText, 0, 0, this._data.width);
+            }
+        };
+        Window_SceneExtra.prototype.refresh = function () {
+            this.drawAllText();
+            TranslationManager.fetchRawData(() => {
+                if (this._data.WindowSkin) {
+                    this.windowskin = ImageManager.loadSystem(this._data.WindowSkin);
+                }
+            });
+        };
+        Window_SceneExtra._jtExtraWindowPatched = true;
+    }
+
+    //EventCommandByCode.js
+    //MZ
+    function patch_EventCommandByCode() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MZ' ||
+            PluginManager._jtEventCommandByCodePatched ||
+            typeof PluginManager._commands['EventCommandByCode:execute'] !== 'function'
+        ) return;
+        const ori = PluginManager._commands['EventCommandByCode:execute'];
+        PluginManager._commands['EventCommandByCode:execute'] = function () {
+            return TranslationManager.fetchRawData(() => ori.apply(this, arguments));
+        };
+        [
+            [Window_NameEdit.prototype, 'charWidth'],
+            [Window_NameEdit.prototype, 'drawChar'],
+            [Window_NameInput.prototype, 'drawItem']
+        ].forEach(entry => {
+            const ori = entry[0][entry[1]];
+            if (typeof ori !== 'function') return;
+            entry[0][entry[1]] = function () {
+                return TranslationManager.skipPluginTrans(() => ori.apply(this, arguments));
+            };
+        });
+        PluginManager._jtEventCommandByCodePatched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -11414,6 +11595,11 @@
     //1.04
     //MZ
     //too complicated for text retrans patch
+
+    //TinyGetInfoWndMZ.js
+    //1.1.0
+    //MZ
+    //tiny retrans
 
     //#endregion
 
@@ -11693,6 +11879,10 @@
         patch_NRP_MapTravel();
         patch_WindowManager();
         patch_RandomTreasure();
+        patch_MaterialBase();
+        patch_ItemCombinationMZ();
+        patch_ExtraWindow();
+        patch_EventCommandByCode();
     };
     //#endregion
 
