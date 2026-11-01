@@ -2,7 +2,8 @@
  * @plugindesc A plugin to translate RPG Maker game text using a JSON dictionary.
  * @author Justype
  * @upstream version 2.3.4 Comprehensive (Broader + Faster)
- * @patch ver 0.15.10.24 newrpg(NRP) plugins primary support
+ * @patch ver 0.16.10.2 kido plugins support
+ *        ver 0.15.10.24 newrpg(NRP) plugins primary support
  *        ver 0.14.10.3 Estriole(EST) plugins primary support
  *        ver 0.13.10.6 Galv plugins primary support
  *        ver 0.12.05.10 VisuStella MZ plugins limited support
@@ -11215,6 +11216,43 @@
         Window_Selectable._jtNRP_MapTravelPatched = true;
     }
 
+    //WindowManager.js
+    //2017/07/14
+    //MV
+    function patch_WindowManager() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof WindowManager === 'undefined' ||
+            typeof Window_Base.prototype.drawTextAutoWrap !== 'function' ||
+            typeof Window_Base.prototype.calcCharacterWidth !== 'function' ||
+            WindowManager._jtWindowManagerPatched
+        ) return;
+        const _calcCW = Window_Base.prototype.calcCharacterWidth;
+        Window_Base.prototype.calcCharacterWidth = function () {
+            return TranslationManager.skipPluginTrans(() => _calcCW.apply(this, arguments));
+        };
+        WindowManager._jtWindowManagerPatched = true;
+    }
+
+    //RandomTreasure.js
+    //1.4
+    //MV
+    function patch_RandomTreasure() {
+        if (
+            Utils.RPGMAKER_NAME !== 'MV' ||
+            typeof Game_System.prototype.getLastRandomTreasure !== 'function' ||
+            Game_Interpreter._jtRandomTreasurePatched
+        ) return;
+        const _pluginC = Game_Interpreter.prototype.pluginCommand;
+        Game_Interpreter.prototype.pluginCommand = function (command, args) {
+            if (command === 'RandomTreasure' && args && args[0] === 'get') {
+                return TranslationManager.fetchRawData(() => _pluginC.apply(this, arguments));
+            }
+            return _pluginC.apply(this, arguments);
+        };
+        Game_Interpreter._jtRandomTreasurePatched = true;
+    }
+
     //#endregion
     //#region record only plugins
     //DestinationWindow.js
@@ -11653,6 +11691,8 @@
         patch_NRP_MagicReflection();
         patch_NRP_LearnSkillList();
         patch_NRP_MapTravel();
+        patch_WindowManager();
+        patch_RandomTreasure();
     };
     //#endregion
 
